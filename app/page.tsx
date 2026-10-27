@@ -212,7 +212,7 @@ export default function CareerSearch(){
                    <span className={`tier tier-${fit.tier.toLowerCase().replace(" ","-")}`}>{fit.tier}</span>
                    <span>{fit.role==="engineering"?"Engineering":fit.role==="solutions"?"Solutions":"Product"}</span>
                    {job.workMode!=="Unknown"&&<span>{job.workMode}</span>}
-                   {job.sector==="Sports & live events"||/sports/i.test(job.sector)&&<span>Sports</span>}
+                   {(/sports|fitness|athlet|gaming/i.test(job.sector))&&<span>Sports / fitness</span>}
                  </div>
                  <p className="result-why">{fit.evidence[0]||"Relevant role"}{fit.evidence[1]?" · "+fit.evidence[1]:""}</p>
                </div>
