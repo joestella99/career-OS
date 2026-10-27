@@ -30,4 +30,4 @@ export type Contact = {
   addedAt: string;
 };
 export type ChatMessage = { role: "user" | "assistant"; content: string };
-export type ActivePage = "Overview" | "Opportunities" | "Pipeline" | "Network" | "AI Copilot" | "Settings";
+export type ActivePage = "Overview" | "Fresh Jobs" | "Opportunities" | "Pipeline" | "Network" | "AI Copilot" | "Settings";
