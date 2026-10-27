@@ -8,7 +8,7 @@ A real Next.js starter with a responsive dashboard, opportunity tracker, explain
 - Score job relevance using **transparent, editable heuristics**. A score is **not** a hiring probability.
 - Track applications in a multi-stage pipeline and contacts with follow-up dates.
 - Export/import a complete JSON backup. Entries currently persist in browser `localStorage` **only**.
-- Chat UI + server route wired to Vercel AI Gateway; requires separate Gateway setup and access key.
+- Chat UI + server route wired to OpenAI models through Vercel AI Gateway, supporting Vercel OIDC or a Gateway key; protected by a separate CareerOS access key.
 - Mobile-responsive layout. No fake jobs, fake contacts, automatic applications, or unsolicited outreach.
 
 ## Start locally
@@ -28,14 +28,14 @@ A real Next.js starter with a responsive dashboard, opportunity tracker, explain
 
 ## Enable AI chat
 
-1. Configure Vercel AI Gateway and check its separate billing/credits. ChatGPT Plus is not an API subscription.
-2. Under Vercel Project → Settings → Environment Variables, securely add:
-   - `AI_GATEWAY_API_KEY` — your Vercel AI Gateway key; **never** paste this into the browser or chat.
-   - `CAREEROS_ACCESS_KEY` — a long random secret that you generate and keep private; prevents unauthenticated use of the AI endpoint. Set it directly in Vercel, not in source files.
-   - Optional `CAREEROS_ASSISTANT_MODEL` (default `openai/gpt-5.4`; check AI Gateway model availability and pricing before enabling).
-3. Redeploy the preview to pick up the environment variables.
+1. Enable [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) and review its separate model billing and credits. ChatGPT subscription allowance is different from Gateway/API billing. Vercel deployments can authenticate to Gateway using platform-issued OIDC tokens without storing an API key.
+2. In **Vercel Project → Settings → Environment Variables**, add:
+   - **Required** `CAREEROS_ACCESS_KEY`: a long, random access secret that protects the AI route. Set it in Vercel, never in GitHub or chat.
+   - **Optional** `AI_GATEWAY_API_KEY`: an AI Gateway key only if OIDC is unavailable. Never put it in client-side code.
+   - **Optional** `CAREEROS_ASSISTANT_MODEL`: defaults to `openai/gpt-6-sol-fast`; confirm availability and pricing using the [live catalog](https://ai-gateway.vercel.sh/v1/models).
+3. Deploy or redeploy. The **AI Copilot** page reports whether server configuration was detected; `GET /api/chat` exposes `{ "configured": true/false }`. This **does not prove** a live model connection works.
 4. Open **Settings** in the app and enter the separate CareerOS access key for that browser tab. This key is held in memory only; it is not saved to `localStorage`.
-5. Open **AI Copilot** and send a test message. App context is transmitted to the API only when "Include up to 15 saved jobs & contacts" is enabled. This is a separate AI assistant integration — it cannot automatically read your ChatGPT memory, Gmail, or calendar.
+5. Open **AI Copilot** and send a test message. App context is transmitted to the API only when "Include up to 15 saved jobs & contacts" is enabled. This is a separate AI assistant integration — it cannot automatically read your ChatGPT memory, Gmail, or calendar. This uses OpenAI models, not your existing ChatGPT login or account allowance. Sign in with ChatGPT for independently hosted websites remains a separate limited-partner integration.
 
 Security notice: **This source repository is public.** Never commit credentials, personal job records, contact information, or private career evidence. `CAREEROS_ACCESS_KEY` is a minimum gate, not a substitute for per-user authentication or rate limiting. **Enable deployment protection** before placing any paid AI access on the public internet. Do not add secrets or private resume files to public GitHub repos.
 
