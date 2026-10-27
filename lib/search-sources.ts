@@ -14,21 +14,16 @@ const ASHBY=[
 ] as const;
 const GREENHOUSE=[
   ["SeatGeek","seatgeek","Sports & live events"],
-  ["Fanatics","fanatics","Sports & commerce"],
-  ["DraftKings","draftkings","Sports & gaming"],
   ["Figma","figma","Software"],
   ["MongoDB","mongodb","Software"],
   ["Datadog","datadog","Software"],
   ["Robinhood","robinhood","Fintech"],
-  ["Plaid","plaid","Fintech"],
-  ["The Athletic","theathletic","Sports media"],
   ["Duolingo","duolingo","Education"],
   ["Samsara","samsara","Software"],
   ["Chime","chime","Fintech"],
   ["Squarespace","squarespace","Software"],
   ["Braze","braze","Software"],
-  ["Greenhouse","greenhouse","Software"],
-  ["Vimeo","vimeo","Media"]
+  ["Greenhouse","greenhouse","Software"]
 ] as const;
 const HIMALAYAS_QUERIES=["software engineer","solutions engineer","associate product manager"];
 type SourceResult={name:string;ok:boolean;jobs:SearchJob[]};
