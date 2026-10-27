@@ -66,6 +66,16 @@ try{
     assert.ok(x.score<=43,`French bilingual role incorrectly scored ${x.score}`);
     assert.ok(x.cautions.some(v=>/fluency/i.test(v)));
   });
+  check("Palantir New Grad excluded when cohort is incompatible",()=>{
+    const x=fitJob({...base,title:"Software Engineer, New Grad",company:"Palantir"});
+    assert.ok(x.score<=39,`Palantir graduate gate missed: ${x.score}`);
+    assert.equal(x.eligibility,"Likely mismatch");
+  });
+  check("Explicit 2027 graduate requirement excludes 2024 graduate",()=>{
+    const x=fitJob({...base,title:"Software Engineer, New Grad",company:"Other",
+      description:"What We Require: Must be graduating in December 2027. React, SQL, TypeScript."});
+    assert.ok(x.score<=39,`Future degree window missed: ${x.score}`);
+  });
   check("No fake hiring probability field",()=>assert.ok(!("interviewProbability" in fitJob(base))));
   console.log("ENGINE TESTS",passes,"passed;",failures,"failed");
   if(failures)process.exitCode=1;
