@@ -139,6 +139,15 @@ export function rankJob(job:SearchJob):FitResult{
     if(job.workMode==="Hybrid"||job.workMode==="On-site"){score+=3;tags.push("Preferred work arrangement");}
   }else if(job.workMode==="Remote"&&job.remoteEligibility!=="unknown"){score+=2;tags.push("US-eligible remote");}
   else{score-=12;gaps.push("Location or US work eligibility needs confirmation");}
+  // Some remote sales/solutions roles are territory-bound even when the ATS labels
+  // them "Remote - US". Treat regions outside NYC/Northeast as a feasibility warning.
+  const remoteOtherTerritory=job.workMode==="Remote" &&
+    /\b(mid[ -]?west|southeast|southwest|tola|west coast|pacific northwest)\b/i.test(title);
+  if(remoteOtherTerritory){
+    score-=12;
+    gaps.push("Role appears assigned to a non-NYC territory; confirm regional eligibility");
+  }
+
   if(SPORTS.test(job.company+" "+job.sector)){score+=4;tags.push("Sports/fitness interest");}
   const age=jobAgeDays(job);
   if(age!==null&&age<=3){score+=2;tags.push(job.dateKind==="published"?"Recently published":"Recently updated");}
@@ -148,6 +157,7 @@ export function rankJob(job:SearchJob):FitResult{
   if(years!==null&&years>=5)score=Math.min(score,47);
   else if(years===4)score=Math.min(score,65);
   if(role==="product"&&!/\b(associate|junior|apm)\b/i.test(title))score=Math.min(score,65);
+  if(remoteOtherTerritory)score=Math.min(score,59);
   score=Math.min(99,Math.max(4,Math.round(score)));
   const tier=score>=82?"Strong match":score>=68?"Good match":score>=52?"Explore":"Stretch";
   const result:FitResult={score,tier,evidence:evidence.slice(0,4),gaps:gaps.slice(0,3),role,requiredYears:years,tags};
