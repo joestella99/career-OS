@@ -4,7 +4,7 @@ A real Next.js starter with a responsive dashboard, opportunity tracker, explain
 
 ## What works now
 
-- Open LinkedIn Easy Apply searches for full-time SWE jobs in the last 15, 30 or 60 minutes, newest first, with NYC and work-model filters. Links are opened on LinkedIn, **not scraped or ingested**. Save individual posting URLs to a new editable pipeline record.
+- **Automated Fresh Jobs:** with a SearchAPI provider key, fetch LinkedIn Easy Apply software-engineering listings posted within the last hour for NYC. Refresh every five minutes while the page is open, render job cards, open full descriptions inside CareerOS and save listings to the pipeline with one click. This uses an external paid data provider, not direct LinkedIn scraping. Without API credentials, show a setup state — never dummy jobs.
 - Add, edit, delete, search and prioritize opportunities; save descriptions, salary, URLs, stages, and notes.
 - Score job relevance using **transparent, editable heuristics**. A score is **not** a hiring probability.
 - Track applications in a multi-stage pipeline and contacts with follow-up dates.
@@ -27,6 +27,19 @@ A real Next.js starter with a responsive dashboard, opportunity tracker, explain
 2. Deploy to a preview environment; don't promote to production without reviewing the build and access controls.
 3. Enable Vercel Authentication / Deployment Protection before storing job-search data on a shared device or enabling a paid API. Local storage does not sync across browsers.
 
+## Enable the automated LinkedIn Easy Apply feed
+
+The Fresh Jobs page is now the default landing screen. No search-link hopping is required once the provider is configured. The job feed is **not active without a provider account and key**.
+
+1. Create an account with [SearchAPI.io](https://www.searchapi.io/) and review the free trial, billing, and LinkedIn data use terms. SearchAPI provides a LinkedIn Jobs engine supporting `time_period=last_hour` and `is_easy_apply=true`; this is a third-party search service, not a LinkedIn-authorized job-search API. Use of LinkedIn-derived data is subject to LinkedIn's terms.
+2. In **Vercel Project → Settings → Environment Variables**, add `SEARCHAPI_API_KEY` as a server-side secret, and `CAREEROS_ACCESS_KEY` as a strong random server-side access secret. Never commit either credential or paste provider keys into the app browser.
+3. Redeploy; in **CareerOS → Settings** enter only the CareerOS access secret for this tab. The feed queries the provider through the server, checks posting age, suppresses duplicates, remembers hidden/seen jobs in browser storage, and polls every **five minutes** while the page is open (and on tab return). The provider can include fields based on its own source interpretation; do not treat it as independent LinkedIn confirmation.
+4. Click **Details** to fetch an individual job description inside CareerOS. This is a separate provider request and may consume another credit. Click **Save job** to create an application-pipeline item with known fields. You still apply on LinkedIn.
+
+**Billing/control:** default refresh cadence makes up to ~288 lookups/day with the app continuously open, before optional detail requests. Next.js caches provider responses for 300 seconds, but cache persistence and accounting can vary across deploys or instances; configure provider spending limits and rate limits before leaving an exposed app open. This version is **not** an always-on background crawler when the site is closed; scheduled ingestion and a persistent cloud job database are a separate next milestone. Vercel deployment protection is strongly recommended on a public repository. To avoid unauthorized spending, requests require the separate CareerOS access secret.
+
+LinkedIn [states that it prohibits unauthorized scraping and automated access](https://www.linkedin.com/help/linkedin/answer/a1341387/prohibition-of-scraping-software); check third-party terms and permissions before enabling any paid integration. No LinkedIn password, cookies, session scraping, or automatic Easy Apply submissions are used.
+
 ## Enable AI chat
 
 1. Enable [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) for your Vercel workspace and review its separate model billing/credits. ChatGPT subscription usage is not the same as Gateway billing. On Vercel, Gateway can use a short-lived platform OIDC token without storing an API key.
@@ -43,7 +56,7 @@ Security notice: **This source repository is public.** Never commit credentials,
 ## Next iterations
 
 1. Replace browser-only storage with Firebase Auth + Firestore or another authenticated cloud database, including security rules and per-user isolation.
-2. Discover current jobs via authorized career-page sources / ATS feeds, deduplicate by stable identifiers, and mark posting verification time.
+2. Add cloud storage and a secured background scheduler so Fresh Jobs keeps collecting even with no browser tab open; broaden sources with authorized ATS feeds and track true retrieval times.
 3. Generate fact-checked resumes/letters using the master career evidence bank (with Onshore and FitView excluded).
 4. Integrate Gmail and Google Calendar through OAuth with least privilege, explicit consent and previews before sending/updating anything.
 5. Add outcomes analytics, document versions, follow-up suggestions and source audit logs.
