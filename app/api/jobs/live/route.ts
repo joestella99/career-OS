@@ -1,40 +1,38 @@
-import {timingSafeEqual} from 'node:crypto';
-import {NextRequest,NextResponse} from 'next/server';
-import {buildSearchApiUrl,normalizeLiveJobs} from '@/lib/live-jobs';
+import {NextResponse} from "next/server";
+import {FREE_BOARDS,normalizeAshbyBoard,type LiveJob} from "@/lib/live-jobs";
 
-export const runtime='nodejs';
-export const dynamic='force-dynamic';
+export const runtime="nodejs";
+export const dynamic="force-dynamic";
 
-function equals(a:string,b:string):boolean {
-  const x=Buffer.from(a),y=Buffer.from(b);
-  return x.length>0 && x.length===y.length && timingSafeEqual(x,y);
-}
+type Result={board:string;ok:boolean;jobs:LiveJob[]};
 
-function reply(data:unknown,status=200){
-  return NextResponse.json(data,{status,headers:{'Cache-Control':'private, no-store'}});
-}
-
-export async function GET(request:NextRequest){
-  const key=process.env.SEARCHAPI_API_KEY;
-  const access=process.env.CAREEROS_ACCESS_KEY;
-  if (!key) return reply({status:'setup_required',message:'Add SEARCHAPI_API_KEY in your Vercel environment to enable automatic job intake.',jobs:[]},503);
-  if (!access) return reply({status:'setup_required',message:'Configure CAREEROS_ACCESS_KEY to protect your paid job-feed requests.',jobs:[]},503);
-  if (!equals(request.headers.get('x-careeros-key')||'',access)) return reply({status:'unauthorized',message:'Enter your CareerOS access key in Settings to load live jobs.',jobs:[]},401);
+async function fetchBoard(board:typeof FREE_BOARDS[number],now:string):Promise<Result>{
+  const url=`https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board.board)}?includeCompensation=true`;
   try{
-    // Next.js server Data Cache shares one provider result across viewers within the 5-minute TTL.
-    // No secret is placed in the URL, client bundle, or API response.
-    const res=await fetch(buildSearchApiUrl(),{
-      headers:{Authorization:`Bearer ${key}`,Accept:'application/json'},
-      next:{revalidate:300},
-      signal:AbortSignal.timeout(15000),
+    const response=await fetch(url,{headers:{Accept:"application/json"},next:{revalidate:300},signal:AbortSignal.timeout(9000)});
+    if(!response.ok)return {board:board.board,ok:false,jobs:[]};
+    const data:unknown=await response.json();
+    if(!data||typeof data!=="object"||!Array.isArray((data as {jobs?:unknown}).jobs))return {board:board.board,ok:false,jobs:[]};
+    return {board:board.board,ok:true,jobs:normalizeAshbyBoard(data,board.company,board.board,now)};
+  }catch{return {board:board.board,ok:false,jobs:[]};}
+}
+
+export async function GET(){
+  // Read-only public company boards: no OpenAI or third-party metered API keys.
+  const checkedAt=new Date().toISOString();
+  const results=await Promise.all(FREE_BOARDS.map(b=>fetchBoard(b,checkedAt)));
+  const successful=results.filter(r=>r.ok);
+  if(!successful.length){
+    return NextResponse.json({status:"error",message:"Public job boards are temporarily unavailable. No placeholder listings were generated.",jobs:[],checkedAt,boardsChecked:results.length,boardsWorking:0},{
+      status:502,headers:{"Cache-Control":"public, max-age=0, s-maxage=60"}
     });
-    if(!res.ok){
-      return reply({status:'provider_error',message:res.status===401||res.status===403?'SearchAPI key was rejected. Check account access and credits.':res.status===429?'Provider rate limit reached. Retry later.':`Job feed provider returned ${res.status}.`,jobs:[]},502);
-    }
-    const json:unknown=await res.json();
-    const checkedAt=new Date().toISOString();
-    return reply({status:'ok',jobs:normalizeLiveJobs(json,checkedAt),checkedAt,source:'SearchAPI / LinkedIn',windowMinutes:60,pollMinutes:5});
-  } catch {
-    return reply({status:'provider_error',message:'Live job intake is temporarily unavailable. Your saved jobs remain intact.',jobs:[]},502);
   }
+  const byUrl=new Map<string,LiveJob>();
+  for(const result of successful)for(const job of result.jobs)byUrl.set(job.url,job);
+  const jobs=[...byUrl.values()].sort((a,b)=>a.postedMinutes-b.postedMinutes).slice(0,160);
+  return NextResponse.json({
+    status:"ok",jobs,checkedAt,boardsChecked:results.length,boardsWorking:successful.length,
+    source:"Direct public Ashby company job boards",windowMinutes:10080,pollMinutes:5,
+    note:"Not LinkedIn Easy Apply. Only selected employers with verified publication timestamps; postedAt means last published."
+  },{headers:{"Cache-Control":"public, max-age=0, s-maxage=60"}});
 }
