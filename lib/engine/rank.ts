@@ -2,7 +2,8 @@ import {CANDIDATE,type Job,type Track,type Fit} from "./profile";
 
 const SENIOR_TITLE=/\b(?:senior|sr\.?|staff|principal|director|vice president|vp|head of|chief|architect|lead (?:software|solutions|sales|platform|product|engineer|developer)|engineering manager|product manager iii|engineer iv|engineer v)\b/i;
 const ENTRY_TITLE=/\b(?:junior|associate|entry[ -]?level|early career|new grad|graduate|apm|engineer i(?:\b|$)|developer i(?:\b|$)|swe i(?:\b|$))\b/i;
-const AREA_TERRITORY=/\b(?:midwest|mid-west|southeast|southwest|tola|west coast|pacific northwest|west region|central region)\b/i;
+const AREA_TERRITORY=/\b(?:mid[ -]?west|south[ -]?east|south[ -]?west|tola|west coast|pacific northwest|west region|central region|southern region)\b/i;
+const LANGUAGE_REQUIREMENT=/\b(?:french|spanish|german|mandarin|japanese|italian|portuguese)\b.*\b(?:bilingual|fluent|required)\b|\b(?:bilingual|fluent)\b.*\b(?:french|spanish|german|mandarin|japanese|italian|portuguese)\b/i;
 const SPORTS=/\b(?:sport|fitness|athlet|baseball|basketball|football|soccer|gaming|wellness|fan experience)\b/i;
 const UNKNOWN_TECH=[
   ["AWS",/\baws\b/i],["Kubernetes",/\bkubernetes\b|\bk8s\b/i],
@@ -92,6 +93,8 @@ export function fitJob(job:Job):Fit{
   if(job.track==="product" && !/associate|apm|junior|analyst/i.test(job.title)){
     score-=11;cautions.push("Formal product-management experience is not in your verified work history.");
   }
+  const languageGate=LANGUAGE_REQUIREMENT.test(job.title);
+  if(languageGate){score-=18;cautions.push("This role specifies language fluency not verified in your career evidence.");}
   const regionalTerritory=job.workplace==="Remote"&&AREA_TERRITORY.test(job.title);
   if(regionalTerritory){score-=13;cautions.push("Remote role specifies a different territory; verify NYC eligibility.");}
   if(job.description.trim().length<140){score-=10;cautions.push("Not enough job-description evidence for a confident fit assessment.");}
@@ -101,10 +104,11 @@ export function fitJob(job:Job):Fit{
   if(years!==null && years>=5)score=Math.min(score,41);
   if(years===4)score=Math.min(score,59);
   if(regionalTerritory)score=Math.min(score,48);
+  if(languageGate)score=Math.min(score,43);
   if(!job.eligibleLocation)score=Math.min(score,48);
   if(job.track==="product" && !/associate|apm|junior|analyst/i.test(job.title))score=Math.min(score,62);
   score=Math.max(5,Math.min(94,Math.round(score)));
-  const hard=sen==="senior"||(years!==null&&years>=5)||!job.eligibleLocation;
+  const hard=sen==="senior"||(years!==null&&years>=5)||!job.eligibleLocation||languageGate||regionalTerritory;
   const eligibility=hard?"Likely mismatch":years!==null&&years>=4||regionalTerritory?"Check requirements":"Good";
   const grade=score>=80?"Strong target":score>=66?"Good target":score>=49?"Consider":"Long shot";
   // No invented "chance of interview". Use a transparent prioritization metric only.
