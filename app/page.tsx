@@ -92,7 +92,7 @@ export default function Page(){
   };
   const saveFeedJob=(lead:LiveJob,description?:string,salary?:string)=>{
     const url=lead.url;
-    if(jobs.some(j=>j.url.replace(/\\/$/,"")===url.replace(/\\/$/,""))){setNotice("Already saved in your pipeline.");return;}
+    if(jobs.some(j=>j.url===url || j.url===url+"/" || j.url+"/"===url)){setNotice("Already saved in your pipeline.");return;}
     const stamp=today();
     const saved:Job={...emptyJob(),id:makeId(),company:lead.company,title:lead.title,location:lead.location,
       url,description:description||lead.description,salary:salary||lead.salary,
