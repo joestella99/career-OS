@@ -213,7 +213,7 @@ export default function Home(){
        <div className="search-lanes">{TRACKS.map(x=><button key={x.key} className={track===x.key?"active":""} onClick={()=>updateTrack(x.key)}>{x.label}</button>)}</div>
      </section>
      <div className="subline">
-       <div><span className="live-chip"><span/> {feed?"PUBLIC FEEDS":"CONNECTING"}</span> <strong>{feed?.jobs.length??"—"}</strong> <span>verified source listings</span><span className="subdot">•</span> <strong>{feed?strong:"—"}</strong> <span>strong targets</span></div>
+       <div><span className="live-chip"><span/> {feed?"PUBLIC FEEDS":"CONNECTING"}</span> <strong>{feed?.jobs.length??"—"}</strong> <span>current source listings</span><span className="subdot">•</span> <strong>{feed?strong:"—"}</strong> <span>strong targets</span></div>
        <div className="subline-right"><span>{sourceCount?sourceCount.ok+"/"+sourceCount.total+" feeds responding":"Checking providers…"}</span>
          <span className="subline-dot">·</span><span>Refreshes while open</span></div>
      </div>
@@ -223,6 +223,7 @@ export default function Home(){
      <main className="workspace">
        <aside className={"filters"+(filtersOpen?" expanded":"")}>
          <div className="filter-heading"><span><Filter size={17}/> Refine your search</span><button type="button" onClick={reset}>Reset</button></div>
+         {hidden.length>0&&<button type="button" className="restore-hidden" onClick={()=>setHidden([])}>Restore {hidden.length} hidden job{hidden.length===1?"":"s"} <ArrowRight size={14}/></button>}
          <div className="field"><label htmlFor="location-filter">Where</label><select id="location-filter" value={mode} onChange={e=>setMode(e.target.value as Mode)}>
            <option value="all">NYC + eligible remote</option><option value="nyc">NYC metro (non-remote)</option><option value="remote">Remote (US eligible)</option>
          </select></div>
