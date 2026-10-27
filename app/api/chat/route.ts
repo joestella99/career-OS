@@ -12,7 +12,7 @@ The app's numeric fit score is a transparent heuristic, NOT a probability of bei
 
 // Configuration readiness only. Does not call the model or prove credentials work.
 export async function GET(request: NextRequest) {
-  const configured = Boolean(process.env.CAREEROS_ACCESS_KEY &&
+  const configured = process.env.CAREEROS_ENABLE_METERED_AI === "true" && Boolean(process.env.CAREEROS_ACCESS_KEY &&
     (process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || request.headers.get("x-vercel-oidc-token")));
   return NextResponse.json({configured}, {headers: {"Cache-Control": "no-store"}});
 }
@@ -24,6 +24,10 @@ function validSecret(provided: string, expected: string) {
 }
 
 export async function POST(request: NextRequest) {
+  // Disabled by default: the owner explicitly requires no additional AI spending.
+  if (process.env.CAREEROS_ENABLE_METERED_AI !== "true") {
+    return NextResponse.json({error:"Paid AI requests are disabled to keep CareerOS at no additional cost. Continue chatting through your existing ChatGPT Plus subscription."},{status:503});
+  }
   // Use short-lived Vercel OIDC credentials when a manually configured Gateway key is absent.
   const gatewayKey = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || request.headers.get("x-vercel-oidc-token");
   const accessKey = process.env.CAREEROS_ACCESS_KEY;
