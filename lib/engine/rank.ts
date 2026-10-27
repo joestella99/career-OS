@@ -56,6 +56,13 @@ export function requiredYears(description:string):number|null{
 export function fitJob(job:Job):Fit{
   const positives:string[]=[],cautions:string[]=[];
   const sen=titleSeniority(job.title);
+  // Palantir's published current early-talent eligibility targets Fall 2026 /
+  // Spring 2027 graduates, or less than six months of industry experience.
+  // Candidate graduated Dec 2024 and has substantially more experience.
+  const palantirNewGradMismatch=job.company==="Palantir"&&/\bnew grad\b/i.test(job.title);
+  const describedCohortMismatch=/\bnew grad\b/i.test(job.title)&&
+    /(?:must be graduating|expected graduation|graduating (?:in|by)|graduates? in)\s*(?:december|spring|fall|summer|winter|[\s,]*)?\s*202[67]/i.test(job.description);
+  const newGradMismatch=palantirNewGradMismatch||describedCohortMismatch;
   const years=requiredYears(job.description);
   const context=job.title+"\n"+job.description;
   const known=CANDIDATE.technologies.filter(k=>k.rx.test(context)).map(k=>k.name);
@@ -69,7 +76,8 @@ export function fitJob(job:Job):Fit{
     score+=3;positives.push(CANDIDATE.evidence.product);
   }
 
-  if(sen==="entry"){score+=18;positives.push("Entry/associate title fits your current career stage.");}
+  if(sen==="entry"&&!newGradMismatch){score+=18;positives.push("Entry/associate title fits your current career stage.");}
+  else if(newGradMismatch){score-=12;cautions.push("New-grad eligibility appears to target a later graduating cohort or under six months of experience; your degree is from 2024.");}
   else if(sen==="mid"){score+=6;}
   else{score-=35;cautions.push("Senior leadership or tenure indicated by the title.");}
 
@@ -105,10 +113,11 @@ export function fitJob(job:Job):Fit{
   if(years===4)score=Math.min(score,59);
   if(regionalTerritory)score=Math.min(score,48);
   if(languageGate)score=Math.min(score,43);
+  if(newGradMismatch)score=Math.min(score,39);
   if(!job.eligibleLocation)score=Math.min(score,48);
   if(job.track==="product" && !/associate|apm|junior|analyst/i.test(job.title))score=Math.min(score,62);
   score=Math.max(5,Math.min(94,Math.round(score)));
-  const hard=sen==="senior"||(years!==null&&years>=5)||!job.eligibleLocation||languageGate||regionalTerritory;
+  const hard=sen==="senior"||(years!==null&&years>=5)||!job.eligibleLocation||languageGate||regionalTerritory||newGradMismatch;
   const eligibility=hard?"Likely mismatch":years!==null&&years>=4||regionalTerritory?"Check requirements":"Good";
   const grade=score>=80?"Strong target":score>=66?"Good target":score>=49?"Consider":"Long shot";
   // No invented "chance of interview". Use a transparent prioritization metric only.
