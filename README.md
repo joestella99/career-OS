@@ -1,72 +1,60 @@
-# CareerOS — free job-search command center
+# CareerOS — a search engine for jobs worth applying to
 
-CareerOS is a Next.js personal job search app. The **Fresh Jobs** screen automatically reads current software engineering openings from selected employers' publicly accessible career-board endpoints. It does not require an additional job-data subscription, AI API key, or LinkedIn sign-in.
+**Search first, not an application dashboard.** CareerOS is a free, responsive Next.js job-search experience tailored to a verified early-career NYC developer with client/implementation and product-building experience. It retrieves real openings, explains why each is a plausible interview target, and lets you shortlist roles immediately.
 
-## What's included
+## Product
 
-- **Free Fresh Jobs:** automatically checks selected public Ashby employer job boards (GameChanger, Novig, Medal / General Intuition, Notion, Clay, Ramp, Patreon, Pure).
-- **LinkedIn + Built In:** optional Gmail alert intake puts selected job links and email digest content directly into the SAME Fresh Jobs screen. It requires user-authorized, read-only Google OAuth setup once, not a paid job-data feed.
-- Shows real NYC-area full-time engineering jobs with employer-provided last-published timestamps, title, location, compensation when available, description, and a direct application link.
-- Filters by last **hour** (default), **24 hours**, or **7 days**. Checks again every five minutes while the Fresh Jobs screen is open and when the browser tab becomes visible. No paid provider calls or fake job cards.
-- Save a posting directly into the application pipeline; mark as seen, dismiss, search, and exclude senior roles.
-- Track opportunities, stages, people, and follow-ups with local browser storage and JSON backup/export.
-- Match scoring is a **heuristic**, not a hiring probability.
+- **Unified live search:** server fetches read-only public Greenhouse and Ashby employer ATS feeds plus [Himalayas](https://himalayas.app/docs/remote-jobs-api) remote job search. No paid keys, subscriptions, web scraping, LinkedIn sessions, or fake postings. A curated catalog of **24 employer feeds plus three remote queries** is attempted; some board identifiers may change or return no jobs.
+- **Three career tracks:** software engineering, solutions/implementation engineering, and associate product/APM. NYC and US-eligible remote jobs are prioritized. Roles can be filtered by track, geography, 3/7/30 days or any date, source, and a search phrase.
+- **Evidence-based interview-fit score, not an interview probability.** A transparent, deterministic 0–100 heuristic weighs relevance to actual FIDx automation/tooling, client requirements and demos, Our Money App / BatOracle projects, technologies, graduation-era experience, location, and realistic seniority. Lists reasons to pursue and gaps to verify. Strong/Groundwork/Stretch tags are not employer judgments. A measurable hiring-probability model would require sufficient application/interview outcomes and a calibration/holdout evaluation.
+- **Search-results-first experience:** ranking and filters dominate. Expanded details include full source description, salary if exposed, time attribution and verified original apply link.
+- **Shortlist:** save or unsave jobs without leaving the search screen. Stored in browser localStorage only; no accounts or cloud syncing yet.
+- **No paid OpenAI integration.** ChatGPT Plus is separate from OpenAI's metered APIs. A previous metered AI endpoint was removed entirely.
 
-**Important:** The free feed is **not LinkedIn Easy Apply** and does **not** cover all of LinkedIn or all NYC employers. Job publication time is the date most recently published by the employer's ATS; employers may republish existing jobs. This is the best honest zero-additional-fee automated version—not a claim to capture every last-hour LinkedIn opening.
+## Data coverage and freshness
 
-The public Ashby API documentation is at https://developers.ashbyhq.com/docs/public-job-posting-api . Respect source availability and published job-board terms.
+- **Ashby:** official public postings with `publishedAt` = most recent publication time, description and optional compensation. API documentation: https://developers.ashbyhq.com/docs/public-job-posting-api
+- **Greenhouse:** official public employer listings with `updated_at` = update time, not necessarily the original posting time. Listing and description require no authentication: https://docs.greenhouse.io/job-board.html
+- **Himalayas:** free remote job search, no API key required. API data refreshes **daily**, so don't treat it as a minute-by-minute live stream. CareerOS displays required Himalayas source credit and retains their original `applicationLink`. https://himalayas.app/docs/remote-jobs-api
 
-## Connect LinkedIn and Built In job alerts inside CareerOS (no paid API)
+Employer feeds are refreshed on a best-effort basis using a 15-minute server data cache. The browser requests results on opening, at 15-minute intervals while the app is open, and when you return to the tab. **This is not unattended 24/7 ingestion, exhaustive NYC hiring coverage, or a LinkedIn Easy Apply feed.** Some sources may be unavailable. The UI marks partial coverage rather than inventing counts.
 
-LinkedIn and Built In do not provide freely available, general-purpose search APIs for CareerOS to ingest their entire job inventories. Rather than scrape their websites or pay for data, CareerOS can import **job-alert emails you already receive**. The app displays alerts, extracts identifiable software engineering job links, removes duplicates, and lets you save links to the pipeline without leaving CareerOS. When a posting cannot be extracted, it shows an email digest instead of fabricating a job.
+A previous experimental LinkedIn / Built In Gmail alert importer remains in the repository as an **unused optional module**, pending Google OAuth setup and appropriate privacy review. It is intentionally excluded from fit rankings because email arrival time, posting age, Easy Apply status and complete requirements often cannot be verified.
 
-**One-time source setup:** Create a relevant NYC software engineer search on [LinkedIn](https://www.linkedin.com/jobs/) and enable **Job alert → Email**. Similarly, configure job matches and daily/weekly alert emails at [Built In](https://builtin.com/). Both providers set the schedule; they generally send daily/weekly messages, so arrival in the last hour is **not** proof the underlying job was posted within an hour.
+## Career evidence / privacy
 
-**One-time free Google setup:**
-1. In [Google Cloud Console](https://console.cloud.google.com/apis/library/gmail.googleapis.com), create/select a project and enable the **Gmail API**.
-2. Under Google Auth Platform / APIs & Services, configure OAuth consent. For personal use, choose **External → Testing** and add your Gmail account as a test user. Google may show an unverified-app warning; only authorize your own reviewed app. Google testing authorizations expire after seven days.
-3. Create an OAuth 2.0 **Web application** client ID, and add exactly your Vercel website origin (e.g. `https://your-app.vercel.app`) and optionally `http://localhost:3000` as Authorized JavaScript origins. Do not put a client secret into CareerOS.
-4. Configure `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in Vercel → Project → Settings → Environment Variables to that **public, non-secret** client ID and redeploy.
-5. Open **Fresh Jobs → Connect Gmail alerts**, approve Google's read-only consent, and set the time window and source filters.
+The ranking model uses verified career facts, not artificial personal metrics: FIDx application development, test automation leadership, client requirements/demos, a Temple CS bachelor's degree, full-stack skills and independently built products. It does not represent Onshore or FitView as job history or projects. No phone number, email, home address or private resume files are included in the search source.
 
-The app requests `https://www.googleapis.com/auth/gmail.readonly`. **This is a restricted, broad Gmail scope**: Google permits access to your entire mailbox, even though CareerOS code filters LinkedIn and Built In senders and only displays matching messages. Grant consent only if comfortable with that scope. Google may require verification or a security review for a publicly distributed integration. The API token is held in browser memory only, not saved to localStorage, GitHub, or our server; closing or refreshing the tab may require reconnecting. Browser Gmail requests are direct to Google's official API.
+Jobs are never submitted automatically, and the app does not impersonate the user or collect private ATS credentials.
 
-Emails are read while the Fresh Jobs view is mounted and checked every five minutes while the site is open. Parsing extracts only recognizable LinkedIn and Built In job URLs, and displays notification arrival times separately from job-publication dates. **Neither LinkedIn Easy Apply nor true last-hour posting age can be verified from these alert emails**. The direct public employer feed below continues independently.
+## Run and test
 
-## Keeping cost at zero
+Requirements: Node.js 22+.
 
-- **No SearchAPI subscription:** its integration and extra chargeable job-details route have been removed.
-- **AI is disabled by default:** `/api/chat` refuses metered requests unless an explicit environment opt-in is enabled. Your ChatGPT Plus subscription does **not** cover OpenAI API or Vercel Gateway charges in this independently hosted web app. Use ChatGPT separately for free within your existing plan.
-- **Hosting:** Vercel Hobby is a free personal-project option, subject to its included usage and terms. Choose the Hobby plan if you don't want a paid Vercel plan. No payment integrations are configured by this source.
-- **No extra credentials:** public job-board reads work without API keys. `.env.example` contains no credentials.
+```bash
+npm install
+npm run typecheck
+node tests/ranking.test.cjs
+npm run build
+npm run dev
+```
 
-## Local development
+GitHub Actions runs a type check, ranking regression tests, and a production build on every push to main. A successful CI build does **not** verify all external employer APIs at runtime; source coverage is reported during use.
 
-1. Install Node.js 22 or newer.
-2. Run `npm install`, then `npm run dev`; open http://localhost:3000 .
-3. Run `npm run build` and `npm run typecheck`.
+## Deploy free on Vercel
 
-**Validation note:** The editing environment could not install npm packages; a complete Next.js production build remains unverified until a deployment or local install. Source changes require that check.
+Import `https://github.com/joestella99/career-OS` as a Next.js app into your **personal Vercel Hobby** workspace. No environment variables or payment integrations are necessary. The authenticated Vercel connector previously did not have permission to create this project; verify that your Vercel dashboard actually shows it before claiming the website is live.
 
-## Deploying on Vercel Hobby
+The GitHub repository is public. Do not commit credentials, private career documents, or personal information. Vercel Hobby usage limits apply, and its cron scheduler does not support every-minute/hourly scheduled jobs. The browser-initiated search works without cron.
 
-1. Import https://github.com/joestella99/career-OS into Vercel's **Hobby** workspace as a Next.js project.
-2. No job-data environment variables are needed. Do **not** enable any paid AI integration. Leave `CAREEROS_ENABLE_METERED_AI` unset or set to `false`.
-3. Deploy and open **Fresh Jobs**. If you see no last-hour jobs, expand the time window to 24 hours or 7 days.
-4. Test saving a job and exporting your pipeline data in Settings. Entries are **browser-only** until we add authenticated cloud sync.
+## Roadmap that matters
 
-## Limitations
+1. Expand and verify employer ATS catalog; use reliable direct-source availability checks, retries, and incremental cache.
+2. Add salary-range extraction and user-adjustable weights, but keep qualifications as the dominant priority.
+3. Add voluntary outcomes ("applied", "screen", "interview") with local export and **calibrate only after there is enough data**, showing uncertainty honestly.
+4. Add optional LinkedIn/Built In email signals after privacy review, keeping them separate from verified employer postings.
+5. Evaluate zero-additional-fee cloud storage / scheduling within free quotas without compromising source rate limits or privacy.
 
-- Refresh happens only while this app's Fresh Jobs view is open; it is **not** a server-side always-on crawler, and no cloud job database is configured.
-- On Vercel Hobby, Cron Jobs cannot run more often than once a day. Building reliable all-day ingestion every few minutes while the site is closed would require a different free scheduler/storage architecture or higher-tier hosting; no such service is enabled.
-- A direct employer application may take you to the employer's ATS. Applications aren't submitted automatically.
-- Some public boards may be temporarily unavailable. Partial sources are shown transparently; no placeholder results are invented.
-- The GitHub repository is public. Never commit resumes, private notes, credentials, or any other personal records.
-- The AI Copilot navigation remains available as a placeholder, but paid requests are **explicitly disabled** by default to avoid spending more.
+## Source terms
 
-## Future work with no extra subscriptions
-
-- Broaden coverage to additional public ATS feeds with source-level timestamps and rate-limited reads.
-- Add secure Firebase Auth and Firestore only after reviewing usage and free quotas.
-- Evaluate a free scheduled collection method with documented rate limits, without requiring upgrades or paid API plans.
-- Keep ChatGPT workflows available through your existing ChatGPT account instead of silently activating metered model traffic.
+Employer and remote-feed data should be attributed and read under their published terms. No automatic job applications, unauthorized LinkedIn scraping or paid SearchAPI services are used.
