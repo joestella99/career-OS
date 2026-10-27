@@ -47,3 +47,14 @@
 - Optional in-app job description lookup with separate provider request; one-click pipeline save.
 - Needs SearchAPI key + CAREEROS_ACCESS_KEY in Vercel. SearchAPI is third-party; review provider and LinkedIn terms and billing. No scraping code or LinkedIn login.
 - Still requires persistent cloud storage and a scheduler for ingesting when the app is closed; build and live integration not yet verified.
+
+
+## v0.2.1 — Zero additional subscriptions (implemented in source)
+- User requires no additional spending beyond existing ChatGPT Plus.
+- Removed paid SearchAPI ingestion and job-details endpoint.
+- Replaced with curated read-only public Ashby company-board queries for NYC full-time SWE postings, with real publication timestamps.
+- Free boards include GameChanger, Novig, Medal / General Intuition, Notion, Clay, Ramp, Patreon, and Pure. Filters cover past hour / day / week.
+- Jobs appear as in-app cards, refreshed every five minutes while the Fresh Jobs view is open; descriptions are included and one-click pipeline saving no longer assumes LinkedIn URLs.
+- Metered OpenAI/Vercel AI Gateway requests are disabled by default using CAREEROS_ENABLE_METERED_AI opt-in guard, including when Vercel OIDC is available. ChatGPT Plus remains a separate website service.
+- Requires a deployment and a complete Next.js build test; no Vercel project is yet confirmed.
+- Do not claim complete LinkedIn Easy Apply coverage or background polling while the browser is closed. The public Vercel Hobby plan supports daily cron only, so hourly unattended polling is not yet configured.
