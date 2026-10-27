@@ -1,4 +1,4 @@
-import {classifyTrack,inferWorkMode,isNYC,isUSRemote,type SearchJob,type WorkMode} from "@/lib/job-search";
+import {classifyTrack,inferWorkMode,isNYC,isUSRemote,rankJob,jobAgeDays,type SearchJob,type WorkMode} from "@/lib/job-search";
 
 // Curated public ATS board IDs; individual boards may change or become unavailable.
 // Failures are disclosed, never filled with invented roles.
@@ -32,7 +32,7 @@ const GREENHOUSE=[
 ] as const;
 const HIMALAYAS_QUERIES=["software engineer","solutions engineer","associate product manager"];
 type SourceResult={name:string;ok:boolean;jobs:SearchJob[]};
-const MAX_DESCRIPTION=8500;
+const MAX_DESCRIPTION=5200;
 function asObj(v:unknown):Record<string,unknown>|null{
  return v&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:null;
 }
@@ -64,8 +64,8 @@ function salaryText(earnings:unknown):string{
  const o=asObj(earnings);if(!o)return "";
  return string(o.scrapeableCompensationSalarySummary||o.compensationTierSummary).slice(0,150);
 }
-async function jsonFrom(url:string):Promise<unknown>{
- const response=await fetch(url,{next:{revalidate:900},headers:{Accept:"application/json"},signal:AbortSignal.timeout(9500)});
+async function jsonFrom(url:string,ttl=900):Promise<unknown>{
+ const response=await fetch(url,{next:{revalidate:ttl},headers:{Accept:"application/json"},signal:AbortSignal.timeout(9500)});
  if(!response.ok)throw Error("provider unavailable");
  return response.json() as Promise<unknown>;
 }
@@ -136,7 +136,8 @@ async function himalayas(query:string,now:string):Promise<SourceResult>{
   const u=new URL("https://himalayas.app/jobs/api/search");
   u.searchParams.set("q",query);u.searchParams.set("country","US");
   u.searchParams.set("sort","recent");u.searchParams.set("page","1");
-  const data=asObj(await jsonFrom(u.toString()));
+  // Himalayas feeds update daily; avoid unnecessary requests against the shared anonymous quota.
+  const data=asObj(await jsonFrom(u.toString(),86400));
   if(!Array.isArray(data?.jobs))return result;
   result.ok=true;
   for(const item of data.jobs){
@@ -185,8 +186,20 @@ export async function discoverJobs(){
   // Prefer direct ATS description over the third-party remote directory when duplicates collide.
   if(!current||(current.source==="Himalayas"&&job.source!=="Himalayas"))jobs.set(k,job);
  }
+ const all=[...jobs.values()].sort((a,b)=>{
+   const fit=rankJob(b).score-rankJob(a).score;
+   return fit||((jobAgeDays(a)??9999)-(jobAgeDays(b)??9999));
+ });
+ const quotas={engineering:260,solutions:160,product:100};
+ const counts={engineering:0,solutions:0,product:0};
+ const selected:SearchJob[]=[];
+ for(const job of all){
+   if(counts[job.track]>=quotas[job.track])continue;
+   selected.push(job);counts[job.track]++;
+ }
+ for(const job of all){if(selected.length>=500)break;if(!selected.includes(job))selected.push(job);}
  return {
-  jobs:[...jobs.values()].slice(0,500),
+  jobs:selected.sort((a,b)=>rankJob(b).score-rankJob(a).score).slice(0,500),
   sources:rankedSources,
   status:rankedSources[1]===0?"unavailable":rankedSources[1]<rankedSources[0]?"partial":"ok",
   checkedAt:now,
