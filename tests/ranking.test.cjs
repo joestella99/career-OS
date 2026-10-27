@@ -55,6 +55,17 @@ try{
       workplace:"Remote",location:"Remote - US"});
     assert.ok(fit.score<=48);assert.ok(fit.cautions.some(s=>s.includes("territory")));
   });
+  check("Mid West territory not a NYC strong target",()=>{
+    const x=fitJob({...base,track:"solutions",title:"Associate Sales Engineer - Mid West",
+      location:"Remote - US",workplace:"Remote"});
+    assert.ok(x.score<=48,`Mid West incorrectly scored ${x.score}`);
+  });
+  check("French bilingual requirement not an assumed skill",()=>{
+    const x=fitJob({...base,track:"solutions",title:"Associate Sales Engineer (French Bilingual)",
+      location:"Remote - US",workplace:"Remote"});
+    assert.ok(x.score<=43,`French bilingual role incorrectly scored ${x.score}`);
+    assert.ok(x.cautions.some(v=>/fluency/i.test(v)));
+  });
   check("No fake hiring probability field",()=>assert.ok(!("interviewProbability" in fitJob(base))));
   console.log("ENGINE TESTS",passes,"passed;",failures,"failed");
   if(failures)process.exitCode=1;
