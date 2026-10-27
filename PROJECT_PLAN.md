@@ -28,8 +28,14 @@
 - AI recommendations with evidence links
 - Server-side privacy and data-retention controls
 
-## v0.1.1 — OpenAI model connection readiness
-- Added Vercel-issued OIDC credential fallback to the existing AI Gateway route, keeping API keys off the public repository.
-- Added a GET configuration check and a setup indicator in the Copilot UI; the indicator does not attest to successful model inference.
-- Updated the verified model default and deployment/credential guidance.
-- Live AI tests are pending a Vercel project and securely configured access control; the complete Next.js build has not been verified.
+## v0.1.1 — Gateway connection readiness
+- Added Vercel OIDC fallback so the app can use OpenAI models through Vercel AI Gateway without storing a Gateway key on Vercel deployments.
+- Added a configuration-check GET endpoint and an in-app setup indicator (configuration presence does not verify live inference).
+- Updated default model to a verified available Gateway OpenAI model and clarified billing/authorization requirements.
+- Production-grade auth, server-side rate limiting and account-based sessions remain out of scope for v0.1.1.
+
+## v0.1.2 — Fresh Jobs
+- LinkedIn Easy Apply / last-hour deep-link search launcher; newest first, full-time NYC SWE.
+- Six keyword search lanes; 15/30/60-minute range; hybrid / onsite / remote filters.
+- Safe LinkedIn job URL validation, canonicalization and duplicate-aware pipeline handoff.
+- No scraping, job ingestion, auto-applying or fake "live" job cards. A true in-app continuously updating LinkedIn-specific feed requires a licensed source/approved integration.
