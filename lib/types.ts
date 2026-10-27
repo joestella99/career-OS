@@ -1,0 +1,33 @@
+export const STAGES = ["Saved", "Applied", "Recruiter Screen", "Interview", "Offer", "Rejected", "Archived"] as const;
+export type JobStage = typeof STAGES[number];
+export type Job = {
+  id: string;
+  company: string;
+  title: string;
+  location: string;
+  workMode: "On-site" | "Hybrid" | "Remote" | "Unknown";
+  url: string;
+  description: string;
+  salary: string;
+  notes: string;
+  stage: JobStage;
+  favorite: boolean;
+  addedAt: string;
+  updatedAt: string;
+  appliedAt?: string;
+};
+export type Contact = {
+  id: string;
+  name: string;
+  company: string;
+  role: string;
+  email: string;
+  linkedin: string;
+  connection: string;
+  nextStep: string;
+  followUpDate: string;
+  notes: string;
+  addedAt: string;
+};
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+export type ActivePage = "Overview" | "Opportunities" | "Pipeline" | "Network" | "AI Copilot" | "Settings";
