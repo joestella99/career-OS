@@ -58,3 +58,13 @@
 - Metered OpenAI/Vercel AI Gateway requests are disabled by default using CAREEROS_ENABLE_METERED_AI opt-in guard, including when Vercel OIDC is available. ChatGPT Plus remains a separate website service.
 - Requires a deployment and a complete Next.js build test; no Vercel project is yet confirmed.
 - Do not claim complete LinkedIn Easy Apply coverage or background polling while the browser is closed. The public Vercel Hobby plan supports daily cron only, so hourly unattended polling is not yet configured.
+
+
+## v0.2.2 — LinkedIn + Built In alert ingestion (source integrated, OAuth setup required)
+- Added an in-app Gmail read-only importer for email job alerts from LinkedIn and Built In. No scraping, third-party job-data subscriptions, or extra OpenAI fees.
+- Added client-side OAuth via Google Identity Services, with access tokens held only in memory and no server-side Gmail data processing.
+- Reads up to 45 recent candidate emails, limited to linked sender domains and relevant job-alert subject/body; follows direct posting links from the delivered email, canonicalizes and deduplicates jobs.
+- Displays received timestamps rather than pretending an email timestamp is the posting time, and explicitly marks Easy Apply as unverified.
+- Saves extracted jobs directly to the existing CareerOS pipeline and shares the Fresh Jobs screen with free employer ATS feeds.
+- Browser polling is five minutes only while the app is open; Gmail OAuth testing/verification and Google Cloud client ID configuration are still necessary. Emails may arrive daily or weekly.
+- Avoid broad claims: not an official LinkedIn or Built In job-search API, not exhaustive coverage, not hourly notifications guaranteed.
