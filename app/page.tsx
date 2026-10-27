@@ -1,152 +1,261 @@
 "use client";
 
-import {useEffect, useMemo, useRef, useState} from "react";
-import {Activity, ArrowRight, Radio, BriefcaseBusiness, CalendarClock, Check, ChevronRight, CircleHelp, Compass, Download, ExternalLink, FileText, Filter, LayoutDashboard, Menu, MessageCircle, Network, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Target, Trash2, Upload, WandSparkles, X} from "lucide-react";
-import {scoreJob} from "@/lib/scoring";
-import LinkedInFreshFeed from "@/components/LinkedInFreshFeed";
-import type {LiveJob} from "@/lib/live-jobs";
-import type {AlertListing} from "@/lib/alert-inbox";
-import {STAGES, type ActivePage, type ChatMessage, type Contact, type Job, type JobStage} from "@/lib/types";
+import {useCallback,useEffect,useMemo,useRef,useState} from "react";
+import {
+  ArrowDownUp,ArrowRight,ArrowUpRight,Bookmark,BookmarkCheck,BriefcaseBusiness,
+  Check,ChevronDown,ChevronRight,Clock3,Compass,ExternalLink,Filter,Heart,
+  MapPin,RefreshCw,Search,ShieldCheck,SlidersHorizontal,Sparkles,Target,
+  TrendingUp,X,Zap
+} from "lucide-react";
+import {
+  DEFAULT_PREFS,filterAndSort,jobAgeDays,rankJob,
+  type SearchFilters,type SearchJob,type Track
+} from "@/lib/job-search";
 
-const STORAGE = "careeros_v1";
-const nav: {title:ActivePage; Icon:typeof LayoutDashboard}[] = [
-  {title:"Overview", Icon:LayoutDashboard},{title:"Fresh Jobs", Icon:Radio},{title:"Opportunities", Icon:Compass},{title:"Pipeline", Icon:BriefcaseBusiness},
-  {title:"Network", Icon:Network},{title:"AI Copilot", Icon:Sparkles},{title:"Settings", Icon:Settings2}
+type ApiResult={jobs:SearchJob[];sources:[number,number];status:"ok"|"partial"|"unavailable";checkedAt:string;limitations:string};
+type Tab="discover"|"shortlist";
+const SAVE_KEY="careeros_shortlist_v2";
+const PREF_KEY="careeros_filters_v2";
+const FIFTEEN_MINUTES=15*60*1000;
+const TRACKS:[Track|"all",string][]=[
+  ["all","Best for me"],["engineering","Software engineer"],["solutions","Solutions / implementation"],["product","Product / APM"]
 ];
-const stageColors: Record<JobStage,string> = {
-  "Saved":"neutral", "Applied":"blue", "Recruiter Screen":"yellow", "Interview":"purple", "Offer":"green", "Rejected":"red", "Archived":"neutral"
-};
-const makeId = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-const today = () => new Date().toISOString();
-const emptyJob = ():Job => ({id:"", title:"", company:"", location:"New York, NY", workMode:"Hybrid",url:"",description:"",salary:"",notes:"",stage:"Saved",favorite:false,addedAt:"",updatedAt:""});
-const emptyContact = ():Contact => ({id:"",name:"",company:"",role:"",email:"",linkedin:"",connection:"",nextStep:"",followUpDate:"",notes:"",addedAt:""});
-const safeLink=(url:string)=>{try {const full = url.startsWith("http") ? url : `https://${url}`; const p = new URL(full); return ["https:","http:"].includes(p.protocol)? full : undefined;} catch {return undefined;}};
-const prettyDate=(date?:string)=>date?new Date(date).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—";
-
-export default function Page(){
-  const [ready,setReady]=useState(false), [section,setSection]=useState<ActivePage>("Fresh Jobs"),[mobileNav,setMobileNav]=useState(false);
-  const [jobs,setJobs]=useState<Job[]>([]),[contacts,setContacts]=useState<Contact[]>([]);
-  const [jobDraft,setJobDraft]=useState<Job|null>(null),[contactDraft,setContactDraft]=useState<Contact|null>(null);
-  const [search,setSearch]=useState(""),[filter,setFilter]=useState("All"),[sort,setSort]=useState("Match score");
-  const [messages,setMessages]=useState<ChatMessage[]>([]),[input,setInput]=useState(""),[working,setWorking]=useState(false),[chatError,setChatError]=useState("");
-  const [accessKey]=useState(""),[includeData,setIncludeData]=useState(true),[notice,setNotice]=useState("");
-  const [aiConfigured,setAiConfigured]=useState<boolean|null>(null);
-  const fileRef=useRef<HTMLInputElement>(null), chatEndRef=useRef<HTMLDivElement>(null);
-
-  useEffect(()=>{
-    try {
-      const saved=localStorage.getItem(STORAGE);
-      if(saved){const d=JSON.parse(saved); if(Array.isArray(d.jobs))setJobs(d.jobs);if(Array.isArray(d.contacts))setContacts(d.contacts);}
-    } catch {setNotice("Saved data could not be read. You can import a backup in Settings.");}
-    setReady(true);
-  },[]);
-  useEffect(()=>{if(ready)try{localStorage.setItem(STORAGE,JSON.stringify({version:1,jobs,contacts}));}catch{setNotice("Browser storage is full or unavailable. Export your data.");}},[jobs,contacts,ready]);
-  useEffect(()=>chatEndRef.current?.scrollIntoView({behavior:"smooth",block:"nearest"}),[messages,working]);
-  useEffect(()=>{
-    let active=true;
-    fetch("/api/chat",{cache:"no-store"})
-      .then(async res=>{if(!res.ok)throw new Error("AI status unavailable");return res.json() as Promise<{configured:boolean}>;})
-      .then(data=>{if(active)setAiConfigured(data.configured);})
-      .catch(()=>{if(active)setAiConfigured(false);});
-    return ()=>{active=false;};
-  },[]);
-  useEffect(()=>{if(notice){const t=setTimeout(()=>setNotice(""),6500);return()=>clearTimeout(t)}},[notice]);
-
-  const visible=useMemo(()=>{
-    const q=search.toLowerCase().trim();
-    const found=jobs.filter(j=>(filter==="All"||j.stage===filter) && (!q||`${j.title} ${j.company} ${j.location} ${j.description}`.toLowerCase().includes(q)));
-    return found.sort((a,b)=>sort==="Newest"?b.addedAt.localeCompare(a.addedAt):sort==="Company"?a.company.localeCompare(b.company):scoreJob(b).score-scoreJob(a).score);
-  },[jobs,search,filter,sort]);
-  const activeJobs=jobs.filter(j=>!(["Rejected","Archived"].includes(j.stage)));
-  const interviewCount=jobs.filter(j=>["Recruiter Screen","Interview"].includes(j.stage)).length;
-  const topJobs=[...activeJobs].sort((a,b)=>scoreJob(b).score-scoreJob(a).score).slice(0,4);
-  const followUps=contacts.filter(c=>c.followUpDate&&c.followUpDate<=new Date().toISOString().slice(0,10)).sort((a,b)=>a.followUpDate.localeCompare(b.followUpDate));
-  const nextActions=[...contacts].filter(c=>c.followUpDate).sort((a,b)=>a.followUpDate.localeCompare(b.followUpDate)).slice(0,4);
-  const go=(name:ActivePage)=>{setSection(name);setMobileNav(false);};
-  const saveJob=()=>{if(!jobDraft||!jobDraft.title.trim()||!jobDraft.company.trim())return;
-    const now=today(); const updated={...jobDraft, id:jobDraft.id||makeId(),addedAt:jobDraft.addedAt||now,updatedAt:now,appliedAt:jobDraft.stage==="Applied"&&!jobDraft.appliedAt?now:jobDraft.appliedAt};
-    setJobs(old=>old.some(j=>j.id===updated.id)?old.map(j=>j.id===updated.id?updated:j):[updated,...old]);setJobDraft(null);setNotice("Opportunity saved.");};
-  const saveContact=()=>{if(!contactDraft||!contactDraft.name.trim())return;
-    const updated={...contactDraft,id:contactDraft.id||makeId(),addedAt:contactDraft.addedAt||today()};
-    setContacts(old=>old.some(c=>c.id===updated.id)?old.map(c=>c.id===updated.id?updated:c):[updated,...old]);setContactDraft(null);setNotice("Contact saved.");};
-  const changeStage=(id:string,stage:JobStage)=>setJobs(old=>old.map(j=>j.id===id?{...j,stage,updatedAt:today(),appliedAt:stage==="Applied"?(j.appliedAt||today()):j.appliedAt}:j));
-  const exportData=()=>{
-    const blob=new Blob([JSON.stringify({version:1,exportedAt:today(),jobs,contacts},null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);const el=document.createElement("a");el.href=url;el.download=`careeros-backup-${today().slice(0,10)}.json`;el.click();URL.revokeObjectURL(url);
-    setNotice("Backup downloaded.");
-  };
-  const importData=async(e:React.ChangeEvent<HTMLInputElement>)=>{
-    const file=e.target.files?.[0];if(!file)return;if(file.size>2000000){setNotice("Backup exceeds 2MB.");return;}
-    try{const data=JSON.parse(await file.text());if(!Array.isArray(data.jobs)||!Array.isArray(data.contacts))throw new Error("Not a CareerOS backup");
-      if(!window.confirm("Replace current jobs and contacts with this backup? Export existing data first if needed."))return;
-      setJobs(data.jobs);setContacts(data.contacts);setNotice("Backup imported.");
-    }catch{setNotice("Import failed. Choose a valid CareerOS backup JSON file.");}finally{e.target.value="";}
-  };
-  const send=async(value?:string)=>{
-    const question=(value??input).trim();if(!question||working)return;
-    const next=[...messages,{role:"user" as const,content:question}].slice(-14);setMessages(next);setInput("");setChatError("");setWorking(true);
-    try{
-      const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json","x-careeros-key":accessKey},body:JSON.stringify({messages:next,jobs:includeData?jobs.slice(0,15):[],contacts:includeData?contacts.slice(0,15):[]})});
-      const data=await response.json();if(!response.ok)throw new Error(data.error||`Request failed (${response.status})`);
-      setMessages(old=>[...old,{role:"assistant",content:data.reply}]);
-    }catch(err){setChatError(err instanceof Error?err.message:"Could not connect to AI.");}finally{setWorking(false);}
-  };
-  const saveFeedJob=(lead:LiveJob,description?:string,salary?:string)=>{
-    const url=lead.url;
-    if(jobs.some(j=>j.url===url || j.url===url+"/" || j.url+"/"===url)){setNotice("Already saved in your pipeline.");return;}
-    const stamp=today();
-    const saved:Job={...emptyJob(),id:makeId(),company:lead.company,title:lead.title,location:lead.location,
-      url,description:description||lead.description,salary:salary||lead.salary,
-      notes:`Discovered through CareerOS free public employer board at ${lead.collectedAt}; last published ${lead.postedAt}. Not verified as LinkedIn Easy Apply.`,
-      stage:"Saved",favorite:false,addedAt:stamp,updatedAt:stamp,workMode:lead.workMode};
-    setJobs(old=>[saved,...old]);setNotice(`${lead.company} — ${lead.title} saved to your pipeline.`);
-  };
-  const saveAlertJob=(lead:AlertListing)=>{
-    const url=lead.url;
-    if(jobs.some(j=>j.url===url||j.url.replace(/\/$/,"")===url.replace(/\/$/,""))){
-      setNotice("This alert job is already in your pipeline.");return;
-    }
-    const stamp=today();
-    const record:Job={...emptyJob(),id:makeId(),company:lead.company||"Company not stated",title:lead.title,
-      location:"",workMode:"Unknown",url,description:lead.preview,salary:"",
-      notes:`Imported from ${lead.source} email alert received ${lead.receivedAt}. Email subject: ${lead.subject}. Original job posting date and LinkedIn Easy Apply status not verified.`,
-      stage:"Saved",favorite:false,addedAt:stamp,updatedAt:stamp};
-    setJobs(previous=>[record,...previous]);setNotice(`${lead.title} saved from ${lead.source} alert.`);
-  };
-  const openChat=(prompt:string)=>{setInput(prompt);go("AI Copilot");};
-
-  return <div className="shell">
-    <aside className={`sidebar ${mobileNav?"sidebar-open":""}`}>
-      <div className="brand"><div className="brand-icon"><Activity size={23} strokeWidth={2.5}/></div><div><strong>career<span>OS</span></strong><small>THE JOB SEARCH SYSTEM</small></div><button className="mobile-close icon-btn" onClick={()=>setMobileNav(false)} aria-label="Close menu"><X size={19}/></button></div>
-      <div className="nav-subtitle">WORKSPACE</div>
-      <nav aria-label="Main navigation">{nav.map(({title,Icon})=><button key={title} className={`nav-link ${section===title?"selected":""}`} onClick={()=>go(title)}><Icon size={18}/><span>{title}</span>{title==="AI Copilot"&&<span className="small-pill">AI</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="sidebar-highlight"><Sparkles size={17}/><strong>Better shots. Better fit.</strong><p>Less noise, more meaningful conversations.</p><button onClick={()=>go("AI Copilot")}>Ask your copilot <ArrowRight size={15}/></button></div><div className="sidebar-owner"><div className="avatar">JS</div><div><strong>Personal workspace</strong><small>NYC · Career transition</small></div><span className="online"/></div></div>
-    </aside>
-    <main className="main">
-      <header className="topbar"><button className="mobile-menu icon-btn" onClick={()=>setMobileNav(true)} aria-label="Open menu"><Menu size={20}/></button><div className="crumb">CareerOS <ChevronRight size={14}/> <strong>{section}</strong></div><div className="top-actions"><div className="local-badge"><ShieldCheck size={15}/> Browser-only storage</div><button className="avatar small" onClick={()=>go("Settings")} aria-label="Settings">JS</button></div></header>
-      {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={14}/></button></div>}
-      <div className="content">
-        <div style={{display:section==="Fresh Jobs"?"block":"none"}}><LinkedInFreshFeed trackedUrls={jobs.map(j=>j.url)} onSaveJob={saveFeedJob} onSaveAlert={saveAlertJob} onSeePipeline={()=>go("Pipeline")}/></div>
-        {section==="Overview"&&<>
-          <div className="hero"><div><div className="eyebrow"><span className="dot"/> YOUR NEXT CHAPTER</div><h1>Make your next move <em>count.</em></h1><p>One clear home for the opportunities, people and decisions that move your career forward.</p><div className="hero-actions"><button className="btn btn-accent" onClick={()=>{setJobDraft(emptyJob());go("Opportunities")}}><Plus size={17}/> Add opportunity</button><button className="btn btn-ghost-light" onClick={()=>go("Fresh Jobs")}><Radio size={17}/> Fresh engineering jobs</button></div></div><div className="hero-mark"><Target size={116} strokeWidth={0.8}/><div className="hero-bubble">PURPOSE<br/>OVER VOLUME</div></div></div>
-          <div className="stats"><Stat label="Active opportunities" value={activeJobs.length} icon={<BriefcaseBusiness size={19}/>} foot="Tracked in your search"/><Stat label="Applications sent" value={jobs.filter(j=>j.stage!=="Saved"&&j.stage!=="Archived").length} icon={<Send size={19}/>} foot="Across tracked roles"/><Stat label="In conversation" value={interviewCount} icon={<MessageCircle size={19}/>} foot="Recruiter screens + interviews"/><Stat label="Follow-ups due" value={followUps.length} icon={<CalendarClock size={19}/>} foot="Contacts due today or earlier" accent={followUps.length>0}/></div>
-          <div className="two-col"><section className="surface"><div className="section-top"><div><div className="eyebrow muted">PRIORITY QUEUE</div><h2>Your strongest leads</h2></div><button className="text-btn" onClick={()=>go("Opportunities")}>View all <ArrowRight size={15}/></button></div>{topJobs.length?topJobs.map(j=><JobCompact key={j.id} job={j} onOpen={()=>setJobDraft({...j})}/>):<Empty icon={<Target size={27}/>} title="A good search starts with one role." text="Add your first opportunity to see transparent fit signals and build your target list." action="Add a role" onAction={()=>setJobDraft(emptyJob())}/>}</section>
-          <section className="surface"><div className="section-top"><div><div className="eyebrow muted">RELATIONSHIP FIRST</div><h2>People to reconnect with</h2></div><button className="text-btn" onClick={()=>go("Network")}>Network <ArrowRight size={15}/></button></div>{nextActions.length?nextActions.map(c=><div className="contact-compact" key={c.id}><div className="initials">{c.name.split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div className="grow"><strong>{c.name}</strong><small>{c.company||"Your network"} · {c.nextStep||"Follow up"}</small></div><span className="due">{prettyDate(c.followUpDate)}</span></div>):<Empty icon={<Network size={27}/>} title="Your network is an advantage." text="Track conversations and the next step instead of losing introductions in your inbox." action="Add contact" onAction={()=>setContactDraft(emptyContact())}/>}</section></div>
-          <section className="surface quickstart"><div className="section-top"><div><div className="eyebrow muted">YOUR GAME PLAN</div><h2>Three ways to get moving</h2></div></div><div className="quick-grid"><button onClick={()=>setJobDraft(emptyJob())}><span className="quick-icon"><Plus size={21}/></span><strong>Capture an opening</strong><small>Paste the full job description</small><ArrowRight size={18}/></button><button onClick={()=>setContactDraft(emptyContact())}><span className="quick-icon"><Network size={21}/></span><strong>Log a relationship</strong><small>Remember who to follow up with</small><ArrowRight size={18}/></button><button onClick={()=>openChat("Help me map out a focused job-search strategy for NYC sports tech, solutions engineering, and product roles.")}><span className="quick-icon"><Sparkles size={21}/></span><strong>Make a plan with AI</strong><small>Build a deliberate search strategy</small><ArrowRight size={18}/></button></div></section>
-        </>}
-        {section==="Opportunities"&&<><PageTitle eyebrow="DISCOVER & EVALUATE" title="Opportunities" description="Collect openings worth considering. Every match score is an explainable prioritization heuristic—not your hiring odds." action={<button className="btn btn-primary" onClick={()=>setJobDraft(emptyJob())}><Plus size={17}/> Add opportunity</button>}/><div className="toolbar"><div className="search"><Search size={17}/><input aria-label="Search roles" placeholder="Search company, title, keywords..." value={search} onChange={e=>setSearch(e.target.value)}/></div><div className="filter"><Filter size={16}/><select aria-label="Filter status" value={filter} onChange={e=>setFilter(e.target.value)}><option>All</option>{STAGES.map(s=><option key={s}>{s}</option>)}</select></div><select className="sort" aria-label="Sort jobs" value={sort} onChange={e=>setSort(e.target.value)}><option>Match score</option><option>Newest</option><option>Company</option></select></div><div className="list-surface">{visible.length?visible.map(job=><article className="job-row" key={job.id}><div className="company-tile">{job.company.trim().slice(0,1).toUpperCase()}</div><div className="job-body"><div className="job-heading"><strong>{job.title}</strong><span className={`status ${stageColors[job.stage]}`}>{job.stage}</span></div><div className="job-info">{job.company} <span>·</span> {job.location||"Location unspecified"} <span>·</span> {job.workMode}</div><div className="job-why">{scoreJob(job).focus}</div></div><div className="fit-block"><span className="fit-score">{scoreJob(job).score}<small>/100</small></span><small>Priority fit</small></div><div className="job-actions"><button className="icon-btn" title="Edit opportunity" onClick={()=>setJobDraft({...job})}><ChevronRight size={21}/></button></div></article>):<Empty icon={<Search size={30}/>} title={jobs.length?"No matching roles":"No opportunities added yet"} text={jobs.length?"Try another filter or search.":"Save job descriptions and links here to create an actionable, prioritized list."} action="Add your first role" onAction={()=>setJobDraft(emptyJob())}/>}</div></>}
-        {section==="Pipeline"&&<><PageTitle eyebrow="APPLICATION TRACKING" title="Your pipeline" description="Move roles through the process and keep next actions visible." action={<button className="btn btn-primary" onClick={()=>setJobDraft(emptyJob())}><Plus size={17}/> Add role</button>}/><div className="pipeline"><div className="pipeline-scroll">{STAGES.slice(0,6).map(stage=><div key={stage} className="lane"><div className="lane-header"><span className={`lane-dot ${stageColors[stage]}`}/><strong>{stage}</strong><span className="lane-count">{jobs.filter(j=>j.stage===stage).length}</span></div><div className="lane-body">{jobs.filter(j=>j.stage===stage).map(j=><div className="pipeline-card" key={j.id}><div className="pipeline-company">{j.company}</div><strong>{j.title}</strong><div className="pipeline-detail"><span>{scoreJob(j).score}/100 priority</span><button title="Edit" className="icon-btn" onClick={()=>setJobDraft({...j})}><ChevronRight size={16}/></button></div><select value={j.stage} onChange={e=>changeStage(j.id,e.target.value as JobStage)} aria-label={`Move ${j.title}`} className="stage-select">{STAGES.map(s=><option key={s} value={s}>{s}</option>)}</select></div>)}{!jobs.some(j=>j.stage===stage)&&<div className="lane-empty">No roles yet</div>}</div></div>)}</div></div><p className="fine-print">Use each card&apos;s status selector to move it between columns. Changes save to this browser.</p></>}
-        {section==="Network"&&<><PageTitle eyebrow="WHO YOU KNOW" title="Your network" description="Relationships are a pipeline, too. Build one thoughtful conversation at a time." action={<button className="btn btn-primary" onClick={()=>setContactDraft(emptyContact())}><Plus size={17}/> Add contact</button>}/><div className="network-grid">{contacts.length?contacts.map(c=><article className="network-card" key={c.id}><div className="network-top"><div className="initials large">{c.name.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase()}</div><button className="icon-btn" onClick={()=>setContactDraft({...c})} aria-label={`Edit ${c.name}`}><ChevronRight size={20}/></button></div><h3>{c.name}</h3><p>{c.role||"Contact"}{c.company?` · ${c.company}`:""}</p>{c.connection&&<span className="connection">{c.connection}</span>}<div className="network-next"><small>Next action</small><strong>{c.nextStep||"Add a next step"}</strong><span>{c.followUpDate?`Follow up ${prettyDate(c.followUpDate)}`:"No date set"}</span></div><div className="network-links">{c.email&&<a href={`mailto:${c.email}`}>Email <ExternalLink size={13}/></a>}{safeLink(c.linkedin)&&<a href={safeLink(c.linkedin)} target="_blank" rel="noopener noreferrer">LinkedIn <ExternalLink size={13}/></a>}</div></article>):<div className="network-empty"><Empty icon={<Network size={32}/>} title="Turn connections into conversations" text="Add alumni, hiring managers, recruiters, past colleagues, and people you meet. We'll organize follow-ups." action="Add your first contact" onAction={()=>setContactDraft(emptyContact())}/></div>}</div></>}
-        {section==="AI Copilot"&&<><PageTitle eyebrow="YOUR STRATEGIC PARTNER" title="CareerOS Copilot" description="A job-search-specialized AI assistant. It uses context you choose to share, not your existing ChatGPT conversation."/><div className="chat-layout"><section className="chat-card"><div className="chat-head"><div className="copilot-avatar"><Sparkles size={20}/></div><div><strong>CareerOS Copilot</strong><small>Strategy · Applications · Networking · Interviews</small></div><span className="ai-indicator">{aiConfigured===null?"Checking model setup...":aiConfigured?"AI configured · not yet tested":"AI setup required"}</span></div><div className="chat-stream">{messages.length?messages.map((m,i)=><div key={i} className={`bubble-wrap ${m.role}`}><div className="bubble-icon">{m.role==="user"?"JS":<Sparkles size={14}/>}</div><div className="bubble">{m.content}</div></div>):<div className="chat-welcome"><div className="welcome-orb"><Sparkles size={30}/></div><h2>Let&apos;s make a smarter move.</h2><p>Ask for a job assessment, networking message, interview plan, or next-week strategy. Configure your OpenAI model through Vercel in Settings to enable responses.</p><div className="prompt-grid">{["Where should I focus my search?","Help me reach out to a hiring manager","Which saved role deserves attention?","Prepare me for an interview"].map(p=><button key={p} onClick={()=>setInput(p)}><WandSparkles size={15}/>{p}</button>)}</div></div>}{working&&<div className="thinking"><span/><span/><span/> Thinking through your next step...</div>}<div ref={chatEndRef}/></div>{chatError&&<div className="chat-error" role="alert">{chatError} <button onClick={()=>go("Settings")}>Open settings</button></div>}<form className="chat-input" onSubmit={e=>{e.preventDefault();void send();}}><textarea aria-label="Message your copilot" value={input} onChange={e=>setInput(e.target.value)} placeholder="What should we work on?" rows={2} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void send();}}}/><div className="chat-input-bottom"><label className="checkbox-label"><input type="checkbox" checked={includeData} onChange={e=>setIncludeData(e.target.checked)}/> Include up to 15 saved jobs & contacts</label><button className="btn btn-primary" disabled={working||!input.trim()} type="submit"><Send size={17}/> Send</button></div></form></section><aside className="copilot-side"><div className="surface"><div className="eyebrow muted">HOW IT WORKS</div><h3>Context on your terms</h3><p>The assistant knows your verified career background. It only sees the jobs and contacts you opt to share with each request.</p><button className="link-row" onClick={()=>go("Settings")}>Set up access <ArrowRight size={15}/></button></div><div className="surface"><div className="eyebrow muted">HIGH-VALUE TASKS</div>{["Evaluate a job description","Tailor my resume evidence","Draft a personal intro","Plan my interview questions"].map(s=><button className="side-prompt" key={s} onClick={()=>setInput(s)}><Plus size={14}/>{s}</button>)}</div></aside></div></>}
-        {section==="Settings"&&<><PageTitle eyebrow="CONTROL CENTER" title="Settings & privacy" description="Your information, your rules. No automatic application submissions or email sends."/><div className="settings-grid"><section className="surface settings-card"><ShieldCheck size={22}/><h2>Local data</h2><p>Jobs and contacts are stored in this browser, not a central database. Back them up before changing browsers or clearing site data.</p><div className="settings-actions"><button className="btn btn-outline" onClick={exportData}><Download size={16}/> Export JSON</button><button className="btn btn-outline" onClick={()=>fileRef.current?.click()}><Upload size={16}/> Import backup</button><input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={importData}/></div><div className="settings-note">{jobs.length} jobs and {contacts.length} contacts in this browser</div></section><section className="surface settings-card"><Sparkles size={22}/><h2>Your ChatGPT Plus account</h2><p>CareerOS is configured to make no paid AI requests. Your existing ChatGPT Plus subscription continues to work through ChatGPT, but it cannot be directly embedded in this independent website at no additional API cost.</p><a className="btn btn-outline" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">Use ChatGPT Plus <ExternalLink size={15}/></a><div className="settings-note"><strong>Fresh Jobs:</strong> Free employer career feeds need no extra account, key, or subscription.</div></section><section className="surface settings-card"><CircleHelp size={22}/><h2>What&apos;s next?</h2><p>Cloud sync, private authentication, daily discovery, Gmail/Calendar integration, and automated document drafting are planned stages—not functioning features of this starter.</p><button className="link-row" onClick={()=>go("AI Copilot")}>Visit Copilot <ArrowRight size={15}/></button></section></div></>}
-      </div>
-    </main>
-    {jobDraft&&<div className="modal-overlay" onMouseDown={e=>{if(e.currentTarget===e.target)setJobDraft(null)}}><div className="modal" role="dialog" aria-modal="true" aria-label="Opportunity editor"><div className="modal-header"><div><div className="eyebrow muted">OPPORTUNITY FILE</div><h2>{jobDraft.id?"Edit opportunity":"Add opportunity"}</h2></div><button className="icon-btn" onClick={()=>setJobDraft(null)} aria-label="Close"><X size={22}/></button></div><div className="modal-body"><div className="form-grid"><Field label="Job title *"><input required value={jobDraft.title} onChange={e=>setJobDraft({...jobDraft,title:e.target.value})} placeholder="Solutions Engineer"/></Field><Field label="Company *"><input required value={jobDraft.company} onChange={e=>setJobDraft({...jobDraft,company:e.target.value})} placeholder="Company name"/></Field><Field label="Location"><input value={jobDraft.location} onChange={e=>setJobDraft({...jobDraft,location:e.target.value})} placeholder="New York, NY"/></Field><Field label="Work arrangement"><select value={jobDraft.workMode} onChange={e=>setJobDraft({...jobDraft,workMode:e.target.value as Job["workMode"]})}><option>On-site</option><option>Hybrid</option><option>Remote</option><option>Unknown</option></select></Field><Field label="Posting URL"><input value={jobDraft.url} onChange={e=>setJobDraft({...jobDraft,url:e.target.value})} placeholder="https://..."/></Field><Field label="Salary / compensation"><input value={jobDraft.salary} onChange={e=>setJobDraft({...jobDraft,salary:e.target.value})} placeholder="Optional"/></Field><Field label="Current status"><select value={jobDraft.stage} onChange={e=>setJobDraft({...jobDraft,stage:e.target.value as JobStage})}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></Field><Field label="Priority marker"><select value={jobDraft.favorite?"Yes":"No"} onChange={e=>setJobDraft({...jobDraft,favorite:e.target.value==="Yes"})}><option>No</option><option>Yes</option></select></Field></div><Field label="Full job description"><textarea rows={7} value={jobDraft.description} onChange={e=>setJobDraft({...jobDraft,description:e.target.value})} placeholder="Paste the full job description here. More detail produces a better (still heuristic) fit assessment."/></Field><Field label="Notes / next step"><textarea rows={3} value={jobDraft.notes} onChange={e=>setJobDraft({...jobDraft,notes:e.target.value})} placeholder="What matters about this opportunity? Who could you speak with?"/></Field><div className="fit-explain"><div className="fit-circle">{scoreJob(jobDraft).score}</div><div><strong>Priority fit (heuristic, not hiring odds)</strong><p>{scoreJob(jobDraft).reasons.join(" · ")||"Add a description to surface relevance signals."}</p>{scoreJob(jobDraft).flags.length>0&&<small>{scoreJob(jobDraft).flags.join(" · ")}</small>}</div></div></div><div className="modal-footer">{jobDraft.id&&<button className="btn btn-danger" onClick={()=>{if(confirm("Delete this opportunity?")){setJobs(jobs.filter(j=>j.id!==jobDraft.id));setJobDraft(null);}}}><Trash2 size={16}/> Delete</button>}{jobDraft.url&&safeLink(jobDraft.url)&&<a className="btn btn-outline" target="_blank" rel="noopener noreferrer" href={safeLink(jobDraft.url)}><ExternalLink size={16}/> Open posting</a>}<span className="grow"/><button className="btn btn-outline" onClick={()=>setJobDraft(null)}>Cancel</button><button className="btn btn-primary" onClick={saveJob} disabled={!jobDraft.title.trim()||!jobDraft.company.trim()}><Check size={16}/> Save role</button></div></div></div>}
-    {contactDraft&&<div className="modal-overlay" onMouseDown={e=>{if(e.currentTarget===e.target)setContactDraft(null)}}><div className="modal" role="dialog" aria-modal="true" aria-label="Contact editor"><div className="modal-header"><div><div className="eyebrow muted">RELATIONSHIP FILE</div><h2>{contactDraft.id?"Edit contact":"Add contact"}</h2></div><button className="icon-btn" onClick={()=>setContactDraft(null)} aria-label="Close"><X size={22}/></button></div><div className="modal-body"><div className="form-grid"><Field label="Name *"><input value={contactDraft.name} onChange={e=>setContactDraft({...contactDraft,name:e.target.value})} placeholder="Name"/></Field><Field label="Company"><input value={contactDraft.company} onChange={e=>setContactDraft({...contactDraft,company:e.target.value})}/></Field><Field label="Role / title"><input value={contactDraft.role} onChange={e=>setContactDraft({...contactDraft,role:e.target.value})}/></Field><Field label="Connection type"><input value={contactDraft.connection} onChange={e=>setContactDraft({...contactDraft,connection:e.target.value})} placeholder="Alumni, recruiter, intro..."/></Field><Field label="Email"><input type="email" value={contactDraft.email} onChange={e=>setContactDraft({...contactDraft,email:e.target.value})}/></Field><Field label="LinkedIn URL"><input value={contactDraft.linkedin} onChange={e=>setContactDraft({...contactDraft,linkedin:e.target.value})}/></Field><Field label="Next step"><input value={contactDraft.nextStep} onChange={e=>setContactDraft({...contactDraft,nextStep:e.target.value})} placeholder="Send intro / schedule coffee"/></Field><Field label="Follow-up date"><input type="date" value={contactDraft.followUpDate} onChange={e=>setContactDraft({...contactDraft,followUpDate:e.target.value})}/></Field></div><Field label="Conversation notes"><textarea rows={4} value={contactDraft.notes} onChange={e=>setContactDraft({...contactDraft,notes:e.target.value})}/></Field></div><div className="modal-footer">{contactDraft.id&&<button className="btn btn-danger" onClick={()=>{if(confirm("Delete this contact?")){setContacts(contacts.filter(c=>c.id!==contactDraft.id));setContactDraft(null);}}}><Trash2 size={16}/> Delete</button>}<span className="grow"/><button className="btn btn-outline" onClick={()=>setContactDraft(null)}>Cancel</button><button className="btn btn-primary" onClick={saveContact} disabled={!contactDraft.name.trim()}><Check size={16}/> Save contact</button></div></div></div>}
-  </div>;
+const AGE_OPTIONS=[
+  {days:3,label:"Last 3 days"},{days:7,label:"Last 7 days"},
+  {days:30,label:"Last 30 days"},{days:3650,label:"Any date"}
+] as const;
+const emptyResult:ApiResult={jobs:[],sources:[0,0],status:"unavailable",checkedAt:"",limitations:""};
+function timeAgo(date:string|null,kind:SearchJob["dateKind"],now:number):string{
+ if(!date)return "Publication date unknown";
+ const age=Math.max(0,now-Date.parse(date));
+ const hours=Math.floor(age/3600000),days=Math.floor(age/86400000);
+ const label=hours<1?"within an hour":hours<24?`${hours}h ago`:`${days}d ago`;
+ return `${kind==="published"?"Published":"Updated"} ${label}`;
 }
-function Field({label,children}:{label:string;children:React.ReactNode}){return <label className="field"><span>{label}</span>{children}</label>}
-function Stat({label,value,icon,foot,accent}:{label:string;value:number;icon:React.ReactNode;foot:string;accent?:boolean}){return <div className="stat-card"><div className="stat-top"><span>{label}</span><span className="stat-icon">{icon}</span></div><div className="stat-value">{value.toString().padStart(2,"0")}</div><div className={`stat-foot ${accent?"stat-warn":""}`}>{foot}</div></div>}
-function PageTitle({eyebrow,title,description,action}:{eyebrow:string;title:string;description:string;action?:React.ReactNode}){return <div className="page-title"><div><div className="eyebrow muted">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{action}</div>}
-function Empty({icon,title,text,action,onAction}:{icon:React.ReactNode;title:string;text:string;action:string;onAction:()=>void}){return <div className="empty"><div className="empty-icon">{icon}</div><h3>{title}</h3><p>{text}</p><button className="btn btn-outline" onClick={onAction}><Plus size={16}/>{action}</button></div>}
-function JobCompact({job,onOpen}:{job:Job;onOpen:()=>void}){const fit=scoreJob(job);return <button className="job-compact" onClick={onOpen}><span className="company-tile">{job.company.charAt(0).toUpperCase()}</span><span className="grow"><strong>{job.title}</strong><small>{job.company} · {job.location||"Location TBD"}</small></span><span className="mini-score">{fit.score}</span><ChevronRight size={17}/></button>}
+function safeLink(url:string):boolean{
+ try{return new URL(url).protocol==="https:";}catch{return false;}
+}
+function localSaved():SearchJob[]{
+ try{const data=JSON.parse(localStorage.getItem(SAVE_KEY)||"[]");
+   return Array.isArray(data)?data.filter(x=>x&&typeof x==="object"&&typeof x.url==="string"&&safeLink(x.url)).slice(0,150):[];
+ }catch{return [];}
+}
+function localFilters():SearchFilters{
+ try{
+   const obj=JSON.parse(localStorage.getItem(PREF_KEY)||"null") as Partial<SearchFilters>|null;
+   if(!obj)return {...DEFAULT_PREFS};
+   return {...DEFAULT_PREFS,...obj,text:"",sort:obj.sort==="recent"?"recent":"fit"};
+ }catch{return {...DEFAULT_PREFS};}
+}
+function sourceLabel(job:SearchJob):string{
+ return job.source==="Himalayas"?"Himalayas · remote":job.source+" · employer";
+}
+function profileEvidence(role:Track):string{
+ if(role==="engineering")return "Lead with your FIDx company-wide test automation work and full-stack internal tools. Show Our Money App for product engineering and BatOracle for Python/data.";
+ if(role==="solutions")return "Lead with your broker-dealer discovery meetings, demos, requirements translation, and implementation work. Pair it with engineering ownership.";
+ return "Lead with requirements discovery, cross-team automation rollout, and product iteration in Our Money App. Do not claim a formal PM title.";
+}
+function Score({job}:{job:SearchJob}){
+ const fit=rankJob(job);
+ return <div className={`fit-score ${fit.score>=82?"top":fit.score>=68?"medium":"low"}`}>
+   <strong>{fit.score}</strong><small>/100</small>
+ </div>;
+}
+export default function CareerSearch(){
+ const [result,setResult]=useState<ApiResult>(emptyResult);
+ const [state,setState]=useState<"loading"|"ready"|"failed">("loading");
+ const [error,setError]=useState("");
+ const [filters,setFilters]=useState<SearchFilters>(DEFAULT_PREFS);
+ const [saved,setSaved]=useState<SearchJob[]>([]);
+ const [tab,setTab]=useState<Tab>("discover");
+ const [selected,setSelected]=useState<string|null>(null);
+ const [shown,setShown]=useState(30);
+ const [mobileFilters,setMobileFilters]=useState(false);
+ const [now,setNow]=useState(Date.now());
+ const [hydrated,setHydrated]=useState(false);
+ const busy=useRef(false);
+ const inputRef=useRef<HTMLInputElement>(null);
+ useEffect(()=>{setSaved(localSaved());setFilters(localFilters());setHydrated(true);},[]);
+ useEffect(()=>{if(hydrated)localStorage.setItem(PREF_KEY,JSON.stringify(filters));},[filters,hydrated]);
+ useEffect(()=>{if(hydrated)localStorage.setItem(SAVE_KEY,JSON.stringify(saved));},[saved,hydrated]);
+ const refresh=useCallback(async()=>{
+   if(busy.current)return;busy.current=true;
+   setState(current=>current==="ready"?"ready":"loading");
+   try{
+     const response=await fetch("/api/search",{cache:"no-store"});
+     const data=await response.json() as ApiResult&{message?:string};
+     if(!response.ok||!Array.isArray(data.jobs))throw Error(data.message||"Sources unavailable. Try refreshing.");
+     const clean=data.jobs.filter(x=>x&&typeof x.id==="string"&&typeof x.title==="string"&&typeof x.url==="string"&&safeLink(x.url));
+     setResult({...data,jobs:clean});setState("ready");setError("");
+   }catch(e){setError(e instanceof Error?e.message:"Search couldn't refresh.");setState("failed");}
+   finally{busy.current=false;}
+ },[]);
+ useEffect(()=>{
+   void refresh();
+   const timer=window.setInterval(()=>void refresh(),FIFTEEN_MINUTES);
+   const focus=()=>{if(document.visibilityState==="visible")void refresh();};
+   document.addEventListener("visibilitychange",focus);
+   const tick=window.setInterval(()=>setNow(Date.now()),60000);
+   return()=>{window.clearInterval(timer);window.clearInterval(tick);document.removeEventListener("visibilitychange",focus);};
+ },[refresh]);
+ const searchResults=useMemo(()=>filterAndSort(result.jobs,filters,now),[result.jobs,filters,now]);
+ const savedIds=new Set(saved.map(s=>s.url.replace(/\/$/,"")));
+ const displayed=tab==="discover"?searchResults:saved.filter(job=>
+   !filters.text.trim()||[job.company,job.title,job.description].join(" ").toLowerCase().includes(filters.text.toLowerCase().trim())
+ );
+ const visible=displayed.slice(0,shown);
+ const current=visible.find(j=>j.id===selected)||visible[0]||null;
+ const scored=useMemo(()=>result.jobs.map(rankJob),[result.jobs]);
+ const highCount=scored.filter(s=>s.score>=82).length;
+ const goodCount=scored.filter(s=>s.score>=68).length;
+ const setFilter=<K extends keyof SearchFilters>(key:K,value:SearchFilters[K])=>{
+   setFilters(old=>({...old,[key]:value}));setShown(30);setSelected(null);
+ };
+ const addSave=(job:SearchJob)=>{
+   setSaved(previous=>savedIds.has(job.url.replace(/\/$/,""))
+    ?previous.filter(x=>x.url.replace(/\/$/,"")!==job.url.replace(/\/$/,""))
+    :[job,...previous].slice(0,150)
+   );
+ };
+ const openList=(next:Tab)=>{setTab(next);setShown(30);setSelected(null);};
+ const reset=()=>{setFilters({...DEFAULT_PREFS});setShown(30);setSelected(null);};
+ const total=result.jobs.length;
+ return <div className="search-app">
+   <header className="search-navbar">
+     <div className="search-mark"><div className="search-logo"><Compass size={23} strokeWidth={2.6}/></div><div><strong>career<span>OS</span></strong><small>THE OPPORTUNITY ENGINE</small></div></div>
+     <nav aria-label="Views" className="search-nav">
+       <button className={tab==="discover"?"nav-active":""} onClick={()=>openList("discover")}>Discover</button>
+       <button className={tab==="shortlist"?"nav-active":""} onClick={()=>openList("shortlist")}>Shortlist <span>{saved.length}</span></button>
+     </nav>
+     <div className="navbar-right"><span className="free-stamp"><ShieldCheck size={14}/> FREE SOURCES</span><button onClick={()=>void refresh()} className="nav-refresh" title="Refresh jobs" aria-label="Refresh jobs"><RefreshCw size={18}/></button></div>
+   </header>
+
+   <main className="search-container">
+     <div className="search-intro">
+       <div className="eyebrow"><span className="pulse"/> BUILT AROUND YOUR EXPERIENCE</div>
+       <h1>Find the job you can <em>actually win.</em></h1>
+       <p>Real openings, matched to your engineering work, client experience, and product projects. Ranked for realistic interview fit—not company prestige or job-board noise.</p>
+     </div>
+
+     <section className="search-panel" aria-label="Job search">
+       <div className="search-field"><Search size={22}/><input ref={inputRef} value={filters.text} onChange={e=>setFilter("text",e.target.value)} placeholder="Search company, role, technology, or keyword…" aria-label="Search opportunities"/>
+       {filters.text&&<button aria-label="Clear search" onClick={()=>setFilter("text","")}><X size={17}/></button>}</div>
+       <button className="search-filter-mobile" onClick={()=>setMobileFilters(!mobileFilters)}><SlidersHorizontal size={17}/> Filters</button>
+       <div className="quick-tracks">
+         {TRACKS.map(([value,label])=><button key={value} className={filters.track===value?"active":""} onClick={()=>setFilter("track",value)}>{label}</button>)}
+       </div>
+     </section>
+
+     <div className="search-summary">
+       <div className="summary-left"><span className="search-live"><span/> LIVE EMPLOYER FEEDS</span>
+         <strong>{state==="ready"?total:"—"}</strong><span>unique roles indexed</span>
+         <span className="summary-separator">/</span><strong>{state==="ready"?highCount:"—"}</strong><span>strong matches</span>
+       </div>
+       <div className="summary-right">
+         <span><Clock3 size={14}/>{result.checkedAt?`Checked ${new Date(result.checkedAt).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}`:"Syncing…"}</span>
+         <span>{result.sources[1]}/{result.sources[0]} feeds connected</span>
+       </div>
+     </div>
+
+     {state==="failed"&&<div className="search-alert"><strong>Some or all sources couldn't load.</strong><span>{error} {total?"Previous results remain on screen.":""}</span><button onClick={()=>void refresh()}>Retry <RefreshCw size={14}/></button></div>}
+     {result.status==="partial"&&state==="ready"&&<div className="search-notice">Some company boards are unavailable at this check. Results are partial, not exhaustive.</div>}
+
+     <div className="search-workspace">
+       <aside className={`filter-sidebar ${mobileFilters?"filter-expanded":""}`}>
+         <div className="filter-top"><strong><Filter size={16}/> Fine-tune matches</strong><button onClick={reset}>Reset</button></div>
+         <div className="filter-unit"><label htmlFor="work-select">Work arrangement</label>
+           <select id="work-select" value={filters.mode} onChange={e=>setFilter("mode",e.target.value as SearchFilters["mode"])}>
+             <option value="all">NYC + US remote</option><option value="onsite-hybrid">NYC / office or hybrid</option><option value="remote">Remote / US eligible</option>
+           </select>
+         </div>
+         <div className="filter-unit"><label htmlFor="age-select">Posting recency</label>
+           <select id="age-select" value={filters.maxDays} onChange={e=>setFilter("maxDays",Number(e.target.value))}>
+             {AGE_OPTIONS.map(x=><option key={x.days} value={x.days}>{x.label}</option>)}
+           </select>
+           <small>Greenhouse dates reflect updates, not original publication.</small>
+         </div>
+         <div className="filter-unit"><label htmlFor="source-select">Data source</label>
+           <select id="source-select" value={filters.sources} onChange={e=>setFilter("sources",e.target.value as SearchFilters["sources"])}>
+             <option value="all">All free sources</option><option value="Ashby">Ashby company boards</option><option value="Greenhouse">Greenhouse company boards</option><option value="Himalayas">Himalayas remote</option>
+           </select>
+         </div>
+         <label className="filter-check"><input type="checkbox" checked={filters.hideStretch} onChange={e=>setFilter("hideStretch",e.target.checked)}/>
+           <span><strong>Prioritize attainable jobs</strong><small>Hide low-fit stretch roles</small></span>
+         </label>
+         <div className="filter-explain">
+           <Target size={20}/><strong>How ranking works</strong>
+           <p>We compare posted requirements to verified FIDx experience, your technical projects, degree, and preferred work environment. Senior titles, large experience gaps, and unverified skills reduce the score.</p>
+           <p><b>Not an interview probability.</b> We need application/interview outcomes to calibrate that.</p>
+         </div>
+         <div className="filter-sources"><span>FREE LIVE DATA</span><p>Ashby and Greenhouse public company boards · Himalayas remote listings</p><p>No paid API keys or ChatGPT usage.</p></div>
+       </aside>
+
+       <section className="results-column" aria-label="Ranked jobs">
+         <div className="results-header">
+           <div><span className="section-kicker">{tab==="discover"?"YOUR RANKED OPPORTUNITIES":"YOUR CURATED SHORTLIST"}</span>
+             <h2>{tab==="discover"?"Best opportunities for you":"Roles worth pursuing"} <span>{displayed.length}</span></h2></div>
+           <div className="results-sort"><ArrowDownUp size={15}/><select aria-label="Sort jobs" value={filters.sort} onChange={e=>setFilter("sort",e.target.value as SearchFilters["sort"])}><option value="fit">Best fit first</option><option value="recent">Most recent first</option></select></div>
+         </div>
+         {state==="loading"&&<div className="results-empty"><RefreshCw className="rotating" size={24}/><h3>Searching verified public job feeds…</h3><p>Comparing real openings against your proven experience.</p></div>}
+         {state!=="loading"&&displayed.length===0&&<div className="results-empty"><Search size={25}/><h3>No jobs match these filters</h3><p>{tab==="shortlist"?"Save promising roles from Discover to build a shortlist.":"Try the last 30 days, another role track, or enable stretch roles. We won't fabricate matches."}</p><button className="button-dark" onClick={()=>tab==="shortlist"?openList("discover"):reset()}> {tab==="shortlist"?"Browse opportunities":"Clear filters"} <ArrowRight size={15}/></button></div>}
+         {state!=="loading"&&visible.map((job,index)=>{
+           const fit=rankJob(job),selectedNow=current?.id===job.id;
+           const isSaved=savedIds.has(job.url.replace(/\/$/,""));
+           return <article key={job.id} className={`result-card ${selectedNow?"card-selected":""}`} onClick={()=>setSelected(job.id)}>
+             <div className="result-card-main">
+               <div className="result-symbol">{job.company.slice(0,1).toUpperCase()}</div>
+               <div className="result-body">
+                 <div className="result-company">{job.company}<span>·</span>{sourceLabel(job)}</div>
+                 <h3>{job.title}</h3>
+                 <div className="result-meta"><span><MapPin size={13}/>{job.location||"Location not stated"}</span><span><Clock3 size={13}/>{timeAgo(job.date,job.dateKind,now)}</span></div>
+                 <div className="result-signals">
+                   <span className={`tier tier-${fit.tier.toLowerCase().replace(" ","-")}`}>{fit.tier}</span>
+                   <span>{fit.role==="engineering"?"Engineering":fit.role==="solutions"?"Solutions":"Product"}</span>
+                   {job.workMode!=="Unknown"&&<span>{job.workMode}</span>}
+                   {job.sector==="Sports & live events"||/sports/i.test(job.sector)&&<span>Sports</span>}
+                 </div>
+                 <p className="result-why">{fit.evidence[0]||"Relevant role"}{fit.evidence[1]?" · "+fit.evidence[1]:""}</p>
+               </div>
+               <div className="result-score"><Score job={job}/><small>fit score</small></div>
+             </div>
+             <div className="result-card-actions">
+               <button onClick={e=>{e.stopPropagation();addSave(job);}} className={isSaved?"small-save is-saved":"small-save"}>{isSaved?<BookmarkCheck size={15}/>:<Bookmark size={15}/>} {isSaved?"Saved":"Shortlist"}</button>
+               <button onClick={e=>{e.stopPropagation();setSelected(job.id);}} className="small-detail">Why this job <ChevronRight size={15}/></button>
+               {safeLink(job.applyUrl)&&<a onClick={e=>e.stopPropagation()} href={job.applyUrl} target="_blank" rel="noopener noreferrer" className="small-apply">Apply <ArrowUpRight size={15}/></a>}
+             </div>
+           </article>;
+         })}
+         {displayed.length>shown&&<button className="show-more" onClick={()=>setShown(n=>n+30)}>Show more matched jobs <ChevronDown size={17}/></button>}
+         <p className="results-foot">Showing real openings returned by available sources. Job availability may change. Rank is rule-based fit, not an employer response forecast.</p>
+       </section>
+
+       <aside className="insights-sidebar">
+         {current?(()=>{
+           const fit=rankJob(current);
+           return <div className="detail-sticky">
+             <div className="detail-heading"><span>THE FIT BREAKDOWN</span><button onClick={()=>setSelected(null)} aria-label="Select top result"><Target size={16}/></button></div>
+             <div className="detail-company">{current.company}</div>
+             <h2>{current.title}</h2>
+             <div className="detail-score-row"><Score job={current}/><div><strong>{fit.tier}</strong><small>Evidence-based relevance, not interview odds</small></div></div>
+             <div className="detail-block"><h3><Check size={17}/> Why you're competitive</h3>
+               {fit.evidence.length?fit.evidence.map((v,i)=><p key={i}>{v}</p>):<p>Not enough verified overlap yet.</p>}
+             </div>
+             <div className="detail-block caution"><h3><SlidersHorizontal size={17}/> What to verify</h3>
+               {fit.gaps.length?fit.gaps.map((v,i)=><p key={i}>{v}</p>):<p>Review the full requirements and employer location policy before applying.</p>}
+             </div>
+             <div className="detail-block"><h3><Sparkles size={17}/> Your strongest application angle</h3><p>{profileEvidence(fit.role)}</p></div>
+             {current.salary&&<div className="detail-salary"><span>Compensation listed</span><strong>{current.salary}</strong></div>}
+             <details className="detail-description"><summary>Read the job description <ChevronDown size={15}/></summary><div>{current.description||"This employer feed did not supply a description."}</div></details>
+             <div className="detail-actions">
+               <button className="button-outline" onClick={()=>addSave(current)}>{savedIds.has(current.url.replace(/\/$/,""))?<BookmarkCheck size={17}/>:<Bookmark size={17}/>} {savedIds.has(current.url.replace(/\/$/,""))?"Remove from shortlist":"Save to shortlist"}</button>
+               {safeLink(current.applyUrl)&&<a className="button-dark" href={current.applyUrl} target="_blank" rel="noopener noreferrer">Go to application <ArrowUpRight size={17}/></a>}
+             </div>
+             <p className="detail-source">Source: <a href={current.sourceUrl} target="_blank" rel="noopener noreferrer">{current.source}</a>. Retrieved from a public job feed; employer review is not guaranteed.</p>
+           </div>;
+         })():<div className="detail-sticky blank-detail"><Target size={27}/><h3>Your career match, explained</h3><p>Select a job to see why it fits, what gaps to watch for, and how to position your experience.</p></div>}
+       </aside>
+     </div>
+     <footer className="search-footer"><div><Compass size={18}/> careerOS</div><span>Search first. Evidence always. No paid search or model calls.</span><a href="https://github.com/joestella99/career-OS" target="_blank" rel="noopener noreferrer">Source code <ExternalLink size={13}/></a></footer>
+   </main>
+ </div>;
+}
