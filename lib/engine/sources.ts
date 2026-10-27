@@ -25,6 +25,11 @@ const GREENHOUSE=[
   ["Braze","braze","Customer engagement"],
   ["Greenhouse","greenhouse","HR technology"]
 ] as const;
+const LEVER=[
+  ["Palantir","palantir","Enterprise software"],
+  ["ION / Lab49","ion","Fintech & consulting"],
+  ["Canary Technologies","canarytechnologies","Hospitality technology"]
+] as const;
 const REMOTE_QUERIES=["software engineer","solutions engineer","associate product manager","implementation engineer","technical account manager"] as const;
 
 type ObjectValue=Record<string,unknown>;
@@ -124,6 +129,43 @@ async function greenhouse(board:typeof GREENHOUSE[number],receivedAt:string):Pro
     return {name,success:true,total:data.jobs.length,jobs};
   }catch(err){return {name,success:false,total:0,jobs:[],error:String(err).slice(0,100)};}
 }
+async function lever(board:typeof LEVER[number],receivedAt:string):Promise<SourceResult>{
+  const [company,slug,sector]=board,name="Lever / "+company;
+  try{
+    const response=await request("https://api.lever.co/v0/postings/"+encodeURIComponent(slug)+"?mode=json&limit=300");
+    if(!Array.isArray(response))throw new Error("Missing postings array");
+    const jobs:Job[]=[];
+    for(const item of response){
+      const p=obj(item);if(!p)continue;
+      const title=str(p.text),track=classifyTitle(title);if(!track)continue;
+      if(/\bintern(?:ship)?\b/i.test(title))continue;
+      const cats=obj(p.categories);
+      const jobType=str(cats?.commitment);
+      if(jobType&&!/full[ -]?time/i.test(jobType))continue;
+      const location=str(cats?.location);
+      const workplace=work(location,str(p.workplaceType));
+      if(!allowed(location,workplace))continue;
+      const url=https(p.hostedUrl);if(!url)continue;
+      const lists=arr(p.lists).map(x=>{
+        const l=obj(x);return str(l?.text)+"\n"+plain(l?.content);
+      }).join("\n");
+      const description=plain(str(p.descriptionPlain)||str(p.description))+"\n"+plain(lists);
+      const date=iso(p.createdAt);
+      const range=obj(p.salaryRange);
+      const salary=range&&range.min&&range.max
+        ?String(range.currency||"USD")+" "+Number(range.min).toLocaleString("en-US")+" – "+Number(range.max).toLocaleString("en-US")
+        :null;
+      jobs.push({
+        id:"lever:"+slug+":"+str(p.id),title,company,location,track,workplace,eligibleLocation:true,
+        source:"Lever",sourceBoard:slug,sector,url,applyUrl:https(p.applyUrl)||url,
+        description:description.slice(0,9000),salary,
+        date,dateType:date?"published":"unknown",receivedAt
+      });
+    }
+    return {name,success:true,total:response.length,jobs};
+  }catch(err){return {name,success:false,total:0,jobs:[],error:String(err).slice(0,100)};}
+}
+
 async function himalayas(q:string,receivedAt:string):Promise<SourceResult>{
   const name="Himalayas / "+q;
   try{
@@ -181,6 +223,7 @@ export async function discover():Promise<Discovery>{
   const groups=await Promise.all([
     ...ASHBY.map(x=>ashby(x,checkedAt)),
     ...GREENHOUSE.map(x=>greenhouse(x,checkedAt)),
+    ...LEVER.map(x=>lever(x,checkedAt)),
     ...REMOTE_QUERIES.map(x=>himalayas(x,checkedAt))
   ]);
   const map=new Map<string,Job>();
