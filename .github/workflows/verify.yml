@@ -24,5 +24,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
+      - name: Ranking regression tests
+        run: node tests/ranking.test.cjs
       - name: Production build
         run: npm run build
