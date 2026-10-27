@@ -2,6 +2,8 @@ import {NextResponse} from "next/server";
 import {discoverJobs} from "@/lib/search-sources";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
+// Accommodate up to 10s public API timeouts plus serverless startup without a paid plan.
+export const maxDuration=30;
 export async function GET(){
   const snapshot=await discoverJobs();
   const code=snapshot.status==="unavailable"?503:200;
