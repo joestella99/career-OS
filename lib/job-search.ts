@@ -97,7 +97,9 @@ function experienceYears(description:string):number|null{
   const vals=[...inContext.matchAll(YEARS)].map(m=>Number(m[1])).filter(n=>n>=1&&n<=20);
   return vals.length?Math.max(...vals):null;
 }
+const fitCache=new WeakMap<SearchJob,FitResult>();
 export function rankJob(job:SearchJob):FitResult{
+  const cached=fitCache.get(job);if(cached)return cached;
   const title=job.title,desc=job.description.slice(0,16000);
   const text=`${title}\n${desc}`;
   const role=classifyTrack(title)??job.track;
@@ -140,7 +142,9 @@ export function rankJob(job:SearchJob):FitResult{
   if(job.description.length<120){score-=6;gaps.push("Limited requirements available to assess");}
   score=Math.min(99,Math.max(4,Math.round(score)));
   const tier=score>=82?"Strong match":score>=68?"Good match":score>=52?"Explore":"Stretch";
-  return {score,tier,evidence:evidence.slice(0,4),gaps:gaps.slice(0,3),role,requiredYears:years,tags};
+  const result={score,tier,evidence:evidence.slice(0,4),gaps:gaps.slice(0,3),role,requiredYears:years,tags};
+  fitCache.set(job,result);
+  return result;
 }
 export function matchText(job:SearchJob,query:string):boolean{
  const parts=query.trim().toLowerCase().split(/\s+/).filter(Boolean);
