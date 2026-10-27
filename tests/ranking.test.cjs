@@ -19,6 +19,24 @@ function test(name,fn){try{fn();process.stdout.write("PASS "+name+"\n");}catch(e
 test("SWE is recognized",()=>assert.equal(classifyTrack("Software Engineer II"),"engineering"));
 test("Solutions engineering recognized",()=>assert.equal(classifyTrack("Solutions Engineer"),"solutions"));
 test("Associate product recognized",()=>assert.equal(classifyTrack("Associate Product Manager"),"product"));
+test("Senior Engineer I must not be treated as junior",()=>{
+ const x=rankJob({...base,title:"Senior Software Engineer I",description:"React Python SQL. 2 years of experience."});
+ assert.ok(x.score<=48,`Senior title incorrectly scored ${x.score}`);
+ assert.ok(x.gaps.some(g=>/Senior/i.test(g)));
+});
+test("Non-engineering enablement roles are excluded",()=>{
+ assert.equal(classifyTrack("Senior Enablement Program Associate - Technical Solutions Enablement"),null);
+ assert.equal(classifyTrack("Product Marketing Director"),null);
+});
+test("Entry-level solutions engineer can score above a senior role",()=>{
+ const junior=rankJob({...base,id:"s1",title:"Associate Solutions Engineer",track:"solutions",description:"Implementation, client demos, SQL APIs, and 1 year of experience."});
+ const senior=rankJob({...base,id:"s2",title:"Senior Solutions Engineer",track:"solutions",description:"Implementation, client demos, SQL APIs, and 1 year of experience."});
+ assert.ok(junior.score>senior.score+20);
+});
+test("Five-plus year requirement is a hard stretch gate",()=>{
+ const x=rankJob({...base,id:"long-tenure",title:"Software Engineer",description:"7 years of professional experience with TypeScript React Python SQL and API integrations."});
+ assert.ok(x.score<=47,`7-year job incorrectly scored ${x.score}`);
+});
 test("Early career role outranks staff role",()=>{
  const junior=rankJob(base);
  const staff=rankJob({...base,title:"Staff Software Engineer",description:"8+ years of professional software engineering experience. AWS Kubernetes and Go required."});
