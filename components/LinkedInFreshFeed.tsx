@@ -32,6 +32,7 @@ export default function LinkedInFreshFeed({trackedUrls,onSaveJob,onSeePipeline}:
   const [previousCheck,setPreviousCheck]=useState<string|null>(null);
   const busy=useRef(false);
   const initialized=useRef(false);
+  const previousIds=useRef<Set<string>>(new Set());
 
   useEffect(()=>{setSeen(readLocal(SEEN_KEY));setHidden(readLocal(HIDDEN_KEY));},[]);
   const markSeen=(id:string)=>setSeen(prev=>{const next=[...new Set([...prev,id])].slice(-1000);localStorage.setItem(SEEN_KEY,JSON.stringify(next));return next;});
@@ -46,7 +47,8 @@ export default function LinkedInFreshFeed({trackedUrls,onSaveJob,onSeePipeline}:
       if(!response.ok||payload.status!=="ok"||!Array.isArray(payload.jobs))throw new Error(payload.message||"Could not fetch public job boards");
       const valid=payload.jobs.filter(j=>j && typeof j.id==="string" && typeof j.postedAt==="string" && j.source==="Ashby public job board");
       const freshIds=new Set(valid.map(j=>j.id));
-      const recentNew=initialized.current?valid.filter(j=>!jobs.some(old=>old.id===j.id)): [];
+      const recentNew=initialized.current?valid.filter(j=>!previousIds.current.has(j.id)): [];
+      previousIds.current=freshIds;
       if(recentNew.length) setPreviousCheck(`${recentNew.length} new role${recentNew.length===1?"":"s"} since the previous check`);
       initialized.current=true;
       setJobs(valid);
@@ -55,11 +57,8 @@ export default function LinkedInFreshFeed({trackedUrls,onSaveJob,onSeePipeline}:
       setBoardOK(payload.boardsWorking||0);
       setStatus("ready");
       setMessage("");
-      void freshIds;
     }catch(error){setStatus("error");setMessage(error instanceof Error?error.message:"Could not load openings");}
     finally{busy.current=false;}
-  // jobs deliberately excluded so the interval does not restart on every response.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   useEffect(()=>{
     void load();
