@@ -51,6 +51,13 @@ test("Client implementation experience produces distinct evidence",()=>{
  const x=rankJob({...base,title:"Solutions Engineer",track:"solutions",description:"Client discovery, stakeholder requirements, integrations, technical demonstrations. 2 years of experience."});
  assert.ok(x.evidence.some(t=>/client|FIDx/i.test(t)));
 });
+test("Other-region remote solutions roles are not top NYC matches",()=>{
+ const regional=rankJob({...base,id:"samsara-midwest",title:"Associate Sales Engineer - Midwest",track:"solutions",
+   workMode:"Remote",location:"Remote - US",remoteEligibility:"US",
+   description:"Client discovery, product demos, SQL, TypeScript, integrations. 1 year of experience."});
+ assert.ok(regional.score<=59,`Non-NYC territory wrongly ranked ${regional.score}`);
+ assert.ok(regional.gaps.some(g=>/territory/i.test(g)));
+});
 test("No score is mislabeled as a probability",()=>{
  const result=rankJob(base);
  assert.ok(Number.isInteger(result.score)&&result.score>=0&&result.score<=100);
