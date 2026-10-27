@@ -142,7 +142,7 @@ export function rankJob(job:SearchJob):FitResult{
   if(job.description.length<120){score-=6;gaps.push("Limited requirements available to assess");}
   score=Math.min(99,Math.max(4,Math.round(score)));
   const tier=score>=82?"Strong match":score>=68?"Good match":score>=52?"Explore":"Stretch";
-  const result={score,tier,evidence:evidence.slice(0,4),gaps:gaps.slice(0,3),role,requiredYears:years,tags};
+  const result:FitResult={score,tier,evidence:evidence.slice(0,4),gaps:gaps.slice(0,3),role,requiredYears:years,tags};
   fitCache.set(job,result);
   return result;
 }
