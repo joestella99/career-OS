@@ -53,7 +53,9 @@ export function requiredYears(description:string):number|null{
   // Don't infer 10+ years from an unrelated executive qualification at the very bottom.
   return found.length?Math.max(...found):null;
 }
+const cachedFits=new WeakMap<Job,Fit>();
 export function fitJob(job:Job):Fit{
+  const previous=cachedFits.get(job);if(previous)return previous;
   const positives:string[]=[],cautions:string[]=[];
   const sen=titleSeniority(job.title);
   // Palantir's published current early-talent eligibility targets Fall 2026 /
@@ -121,8 +123,10 @@ export function fitJob(job:Job):Fit{
   const eligibility=hard?"Likely mismatch":years!==null&&years>=4||regionalTerritory?"Check requirements":"Good";
   const grade=score>=80?"Strong target":score>=66?"Good target":score>=49?"Consider":"Long shot";
   // No invented "chance of interview". Use a transparent prioritization metric only.
-  return {score,grade,eligibility,positives:positives.slice(0,4),cautions:cautions.slice(0,4),
+  const result:Fit={score,grade,eligibility,positives:positives.slice(0,4),cautions:cautions.slice(0,4),
     skills:known,yearsRequired:years,seniority:sen,sortPriority:score};
+  cachedFits.set(job,result);
+  return result;
 }
 export function normalizedTitle(title:string):string{
   return title.toLowerCase().replace(/[^\da-z]/g," ").replace(/\s+/g," ").trim();
