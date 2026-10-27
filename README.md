@@ -4,12 +4,20 @@
 
 ## Product
 
-- **Unified live search:** server fetches read-only public Greenhouse and Ashby employer ATS feeds plus [Himalayas](https://himalayas.app/docs/remote-jobs-api) remote job search. No paid keys, subscriptions, web scraping, LinkedIn sessions, or fake postings. A curated catalog of **24 employer feeds plus three remote queries** is attempted; some board identifiers may change or return no jobs.
+- **Unified live search:** server fetches read-only public Greenhouse and Ashby employer ATS feeds plus [Himalayas](https://himalayas.app/docs/remote-jobs-api) remote job search. No paid keys, subscriptions, web scraping, LinkedIn sessions, or fake postings. A curated catalog of **19 verified employer feeds plus three remote queries** is attempted; some board identifiers may change or return no jobs.
 - **Three career tracks:** software engineering, solutions/implementation engineering, and associate product/APM. NYC and US-eligible remote jobs are prioritized. Roles can be filtered by track, geography, 3/7/30 days or any date, source, and a search phrase.
 - **Evidence-based interview-fit score, not an interview probability.** A transparent, deterministic 0–100 heuristic weighs relevance to actual FIDx automation/tooling, client requirements and demos, Our Money App / BatOracle projects, technologies, graduation-era experience, location, and realistic seniority. Lists reasons to pursue and gaps to verify. Strong/Groundwork/Stretch tags are not employer judgments. A measurable hiring-probability model would require sufficient application/interview outcomes and a calibration/holdout evaluation.
 - **Search-results-first experience:** ranking and filters dominate. Expanded details include full source description, salary if exposed, time attribution and verified original apply link.
 - **Shortlist:** save or unsave jobs without leaving the search screen. Stored in browser localStorage only; no accounts or cloud syncing yet.
 - **No paid OpenAI integration.** ChatGPT Plus is separate from OpenAI's metered APIs. A previous metered AI endpoint was removed entirely.
+
+## What the October 27 integration tests proved
+
+GitHub Actions now tests public-source connectivity **and executes the real discovery/ranking pipeline**, not just the Next.js build. In the last full clean run, 22/22 active source requests succeeded and 269 qualifying jobs were returned from Ashby, Greenhouse and Himalayas. Live results vary as employers change listings.
+
+The tests also caught and fixed an important scoring defect: senior positions such as "Senior Software Engineer I" and non-engineering enablement roles had incorrectly surfaced as exceptional matches. Senior-title jobs and listings requiring five or more years are now always capped as stretch fits, and non-NYC regional remote sales territories are flagged. These scores remain transparent heuristics, never hiring probabilities.
+
+If your website is not deploying, check the Vercel project separately: **passing GitHub Actions does not prove a Vercel deployment exists or is accessible**.
 
 ## Data coverage and freshness
 
