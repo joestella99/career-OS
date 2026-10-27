@@ -5,6 +5,7 @@ import {Activity, ArrowRight, Radio, BriefcaseBusiness, CalendarClock, Check, Ch
 import {scoreJob} from "@/lib/scoring";
 import LinkedInFreshFeed from "@/components/LinkedInFreshFeed";
 import type {LiveJob} from "@/lib/live-jobs";
+import type {AlertListing} from "@/lib/alert-inbox";
 import {STAGES, type ActivePage, type ChatMessage, type Contact, type Job, type JobStage} from "@/lib/types";
 
 const STORAGE = "careeros_v1";
@@ -100,6 +101,18 @@ export default function Page(){
       stage:"Saved",favorite:false,addedAt:stamp,updatedAt:stamp,workMode:lead.workMode};
     setJobs(old=>[saved,...old]);setNotice(`${lead.company} — ${lead.title} saved to your pipeline.`);
   };
+  const saveAlertJob=(lead:AlertListing)=>{
+    const url=lead.url;
+    if(jobs.some(j=>j.url===url||j.url.replace(/\/$/,"")===url.replace(/\/$/,""))){
+      setNotice("This alert job is already in your pipeline.");return;
+    }
+    const stamp=today();
+    const record:Job={...emptyJob(),id:makeId(),company:lead.company||"Company not stated",title:lead.title,
+      location:"",workMode:"Unknown",url,description:lead.preview,salary:"",
+      notes:`Imported from ${lead.source} email alert received ${lead.receivedAt}. Email subject: ${lead.subject}. Original job posting date and LinkedIn Easy Apply status not verified.`,
+      stage:"Saved",favorite:false,addedAt:stamp,updatedAt:stamp};
+    setJobs(previous=>[record,...previous]);setNotice(`${lead.title} saved from ${lead.source} alert.`);
+  };
   const openChat=(prompt:string)=>{setInput(prompt);go("AI Copilot");};
 
   return <div className="shell">
@@ -113,7 +126,7 @@ export default function Page(){
       <header className="topbar"><button className="mobile-menu icon-btn" onClick={()=>setMobileNav(true)} aria-label="Open menu"><Menu size={20}/></button><div className="crumb">CareerOS <ChevronRight size={14}/> <strong>{section}</strong></div><div className="top-actions"><div className="local-badge"><ShieldCheck size={15}/> Browser-only storage</div><button className="avatar small" onClick={()=>go("Settings")} aria-label="Settings">JS</button></div></header>
       {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={14}/></button></div>}
       <div className="content">
-        {section==="Fresh Jobs"&&<LinkedInFreshFeed trackedUrls={jobs.map(j=>j.url)} onSaveJob={saveFeedJob} onSeePipeline={()=>go("Pipeline")}/>}
+        <div style={{display:section==="Fresh Jobs"?"block":"none"}}><LinkedInFreshFeed trackedUrls={jobs.map(j=>j.url)} onSaveJob={saveFeedJob} onSaveAlert={saveAlertJob} onSeePipeline={()=>go("Pipeline")}/></div>
         {section==="Overview"&&<>
           <div className="hero"><div><div className="eyebrow"><span className="dot"/> YOUR NEXT CHAPTER</div><h1>Make your next move <em>count.</em></h1><p>One clear home for the opportunities, people and decisions that move your career forward.</p><div className="hero-actions"><button className="btn btn-accent" onClick={()=>{setJobDraft(emptyJob());go("Opportunities")}}><Plus size={17}/> Add opportunity</button><button className="btn btn-ghost-light" onClick={()=>go("Fresh Jobs")}><Radio size={17}/> Fresh engineering jobs</button></div></div><div className="hero-mark"><Target size={116} strokeWidth={0.8}/><div className="hero-bubble">PURPOSE<br/>OVER VOLUME</div></div></div>
           <div className="stats"><Stat label="Active opportunities" value={activeJobs.length} icon={<BriefcaseBusiness size={19}/>} foot="Tracked in your search"/><Stat label="Applications sent" value={jobs.filter(j=>j.stage!=="Saved"&&j.stage!=="Archived").length} icon={<Send size={19}/>} foot="Across tracked roles"/><Stat label="In conversation" value={interviewCount} icon={<MessageCircle size={19}/>} foot="Recruiter screens + interviews"/><Stat label="Follow-ups due" value={followUps.length} icon={<CalendarClock size={19}/>} foot="Contacts due today or earlier" accent={followUps.length>0}/></div>
