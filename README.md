@@ -4,7 +4,8 @@ CareerOS is a Next.js personal job search app. The **Fresh Jobs** screen automat
 
 ## What's included
 
-- **Free Fresh Jobs:** automatically checks 8 public Ashby employer job boards (GameChanger, Novig, Medal / General Intuition, Notion, Clay, Ramp, Patreon, Pure).
+- **Free Fresh Jobs:** automatically checks selected public Ashby employer job boards (GameChanger, Novig, Medal / General Intuition, Notion, Clay, Ramp, Patreon, Pure).
+- **LinkedIn + Built In:** optional Gmail alert intake puts selected job links and email digest content directly into the SAME Fresh Jobs screen. It requires user-authorized, read-only Google OAuth setup once, not a paid job-data feed.
 - Shows real NYC-area full-time engineering jobs with employer-provided last-published timestamps, title, location, compensation when available, description, and a direct application link.
 - Filters by last **hour** (default), **24 hours**, or **7 days**. Checks again every five minutes while the Fresh Jobs screen is open and when the browser tab becomes visible. No paid provider calls or fake job cards.
 - Save a posting directly into the application pipeline; mark as seen, dismiss, search, and exclude senior roles.
@@ -14,6 +15,23 @@ CareerOS is a Next.js personal job search app. The **Fresh Jobs** screen automat
 **Important:** The free feed is **not LinkedIn Easy Apply** and does **not** cover all of LinkedIn or all NYC employers. Job publication time is the date most recently published by the employer's ATS; employers may republish existing jobs. This is the best honest zero-additional-fee automated version—not a claim to capture every last-hour LinkedIn opening.
 
 The public Ashby API documentation is at https://developers.ashbyhq.com/docs/public-job-posting-api . Respect source availability and published job-board terms.
+
+## Connect LinkedIn and Built In job alerts inside CareerOS (no paid API)
+
+LinkedIn and Built In do not provide freely available, general-purpose search APIs for CareerOS to ingest their entire job inventories. Rather than scrape their websites or pay for data, CareerOS can import **job-alert emails you already receive**. The app displays alerts, extracts identifiable software engineering job links, removes duplicates, and lets you save links to the pipeline without leaving CareerOS. When a posting cannot be extracted, it shows an email digest instead of fabricating a job.
+
+**One-time source setup:** Create a relevant NYC software engineer search on [LinkedIn](https://www.linkedin.com/jobs/) and enable **Job alert → Email**. Similarly, configure job matches and daily/weekly alert emails at [Built In](https://builtin.com/). Both providers set the schedule; they generally send daily/weekly messages, so arrival in the last hour is **not** proof the underlying job was posted within an hour.
+
+**One-time free Google setup:**
+1. In [Google Cloud Console](https://console.cloud.google.com/apis/library/gmail.googleapis.com), create/select a project and enable the **Gmail API**.
+2. Under Google Auth Platform / APIs & Services, configure OAuth consent. For personal use, choose **External → Testing** and add your Gmail account as a test user. Google may show an unverified-app warning; only authorize your own reviewed app. Google testing authorizations expire after seven days.
+3. Create an OAuth 2.0 **Web application** client ID, and add exactly your Vercel website origin (e.g. `https://your-app.vercel.app`) and optionally `http://localhost:3000` as Authorized JavaScript origins. Do not put a client secret into CareerOS.
+4. Configure `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in Vercel → Project → Settings → Environment Variables to that **public, non-secret** client ID and redeploy.
+5. Open **Fresh Jobs → Connect Gmail alerts**, approve Google's read-only consent, and set the time window and source filters.
+
+The app requests `https://www.googleapis.com/auth/gmail.readonly`. **This is a restricted, broad Gmail scope**: Google permits access to your entire mailbox, even though CareerOS code filters LinkedIn and Built In senders and only displays matching messages. Grant consent only if comfortable with that scope. Google may require verification or a security review for a publicly distributed integration. The API token is held in browser memory only, not saved to localStorage, GitHub, or our server; closing or refreshing the tab may require reconnecting. Browser Gmail requests are direct to Google's official API.
+
+Emails are read while the Fresh Jobs view is mounted and checked every five minutes while the site is open. Parsing extracts only recognizable LinkedIn and Built In job URLs, and displays notification arrival times separately from job-publication dates. **Neither LinkedIn Easy Apply nor true last-hour posting age can be verified from these alert emails**. The direct public employer feed below continues independently.
 
 ## Keeping cost at zero
 
