@@ -56,7 +56,8 @@ const ENTRY=/\b(junior|associate|entry.level|new grad|early career|graduate|engi
 const SPORTS=/\b(sport|fitness|athletic|baseball|football|basketball|soccer|fan experience|wellness|performance analytics|gaming)\b/i;
 const HARD_REQUIREMENT=/\b(must have|required|minimum|at least|qualifications?|requirements?)\b/i;
 const YEARS=/(?:at least|minimum of|\bmin\.?\s*)?\b(\d{1,2})\s*\+?\s*(?:years|yrs)\s*(?:of)?\s*(?:professional|relevant|industry|work|hands.on|software|experience)/gi;
-const DEFAULT_PREFS:SearchFilters={text:"",track:"all",mode:"all",maxDays:30,sort:"fit",hideStretch:true,sources:"all"};
+// Prioritize current, open feed entries over a narrow publish-date window: older open jobs may be strong matches.
+const DEFAULT_PREFS:SearchFilters={text:"",track:"all",mode:"all",maxDays:3650,sort:"fit",hideStretch:true,sources:"all"};
 export {DEFAULT_PREFS};
 export function classifyTrack(title:string):Track|null{
   if(/\b(associate product manager|product manager|product owner|apm|product analyst|technical product manager|product operations)\b/i.test(title))return "product";
