@@ -35,7 +35,14 @@ export function requiredYears(description:string):number|null{
     if(/\b(?:founded|company has|in business|serving customers for|years ago|since \d{4}|history of)\b/i.test(part))continue;
     const contextual=/\b(?:required|must have|at least|minimum|qualifications?|experience|you have|you bring|years of)\b/i.test(part);
     if(!contextual)continue;
+    // In ranges such as "2–5 years of experience", the lower bound is the minimum,
+    // not the 5-year maximum. Avoid overstating the required tenure.
+    for(const range of part.matchAll(/\b(\d{1,2})\s*[-–]\s*(\d{1,2})\s*(?:years|yrs)\b/gi)){
+      const lower=Number(range[1]);if(lower>=1&&lower<=20)found.push(lower);
+    }
     for(const m of part.matchAll(/\b(\d{1,2})\s*\+?\s*(?:years|yrs)\s+(?:of\s+)?(?:(?:professional|relevant|hands-on|work|industry|commercial|software|engineering|technical|related)\s+)?(?:experience|development|engineering|software|coding|building|working)/gi)){
+      const prefix=part.slice(Math.max(0,(m.index??0)-10),m.index??0);
+      if(/\d+\s*[-–]\s*$/.test(prefix))continue;
       const n=Number(m[1]);if(n>=1&&n<=20)found.push(n);
     }
     for(const m of part.matchAll(/\b(?:at least|minimum of|require(?:d|s)?)\s+(\d{1,2})\s*\+?\s*(?:years|yrs)\b/gi)){
@@ -109,7 +116,7 @@ export function normalizedTitle(title:string):string{
 }
 export function isNycArea(location:string):boolean{
   // New York state alone is insufficient to assume a NYC commute.
-  return /\b(new york city|new york,\s*ny|nyc|manhattan|brooklyn|queens|bronx|jersey city|hoboken|newark|white plains|stamford|long island|new york metropolitan)\b/i.test(location);
+  return /^new york$/i.test(location.trim()) || /\b(new york city|new york,\s*ny|nyc|manhattan|brooklyn|queens|bronx|jersey city|hoboken|newark|white plains|stamford|long island|new york metropolitan)\b/i.test(location);
 }
 export function permitsUSRemote(location:string):boolean{
   return /\b(?:united states|usa|u\.s\.|us remote|remote[- ,]*us|north america|worldwide|anywhere)\b/i.test(location);
