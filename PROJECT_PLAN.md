@@ -39,3 +39,11 @@
 - Six keyword search lanes; 15/30/60-minute range; hybrid / onsite / remote filters.
 - Safe LinkedIn job URL validation, canonicalization and duplicate-aware pipeline handoff.
 - No scraping, job ingestion, auto-applying or fake "live" job cards. A true in-app continuously updating LinkedIn-specific feed requires a licensed source/approved integration.
+
+## v0.2 — Automated intake (code ready, credentials required)
+- Replaced the search-link dashboard with real in-app LinkedIn job cards fetched via SearchAPI. Filters are one-hour posting window, NYC metro and Easy Apply.
+- Refreshes every five minutes with browser tab open and on tab focus; server cache TTL five minutes, server-side provider key, authenticated GET.
+- Dedupes provider records, suppresses stale or undated postings, filters software engineering roles, tracks seen/hidden jobs in browser storage.
+- Optional in-app job description lookup with separate provider request; one-click pipeline save.
+- Needs SearchAPI key + CAREEROS_ACCESS_KEY in Vercel. SearchAPI is third-party; review provider and LinkedIn terms and billing. No scraping code or LinkedIn login.
+- Still requires persistent cloud storage and a scheduler for ingesting when the app is closed; build and live integration not yet verified.
