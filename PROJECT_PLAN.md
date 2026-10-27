@@ -27,3 +27,9 @@
 - Human-reviewed document versions
 - AI recommendations with evidence links
 - Server-side privacy and data-retention controls
+
+## v0.1.1 — OpenAI model connection readiness
+- Added Vercel-issued OIDC credential fallback to the existing AI Gateway route, keeping API keys off the public repository.
+- Added a GET configuration check and a setup indicator in the Copilot UI; the indicator does not attest to successful model inference.
+- Updated the verified model default and deployment/credential guidance.
+- Live AI tests are pending a Vercel project and securely configured access control; the complete Next.js build has not been verified.
