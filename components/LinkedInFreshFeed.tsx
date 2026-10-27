@@ -1,123 +1,142 @@
 "use client";
 
-import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {ArrowUpRight,Bell,BookmarkCheck,BriefcaseBusiness,Check,ChevronDown,Clock3,ExternalLink,Eye,EyeOff,Radio,RefreshCw,Search,ShieldCheck,Sparkles} from 'lucide-react';
-import type {LiveJob} from '@/lib/live-jobs';
-import {REFRESH_INTERVAL_MS} from '@/lib/live-jobs';
+import {useCallback,useEffect,useMemo,useRef,useState} from "react";
+import {ArrowUpRight,BookmarkCheck,BriefcaseBusiness,Check,ChevronDown,Clock3,Eye,EyeOff,Radio,RefreshCw,Search,ShieldCheck,Sparkles} from "lucide-react";
+import {REFRESH_INTERVAL_MS,type LiveJob} from "@/lib/live-jobs";
 
-type FeedPayload={status:string;message?:string;checkedAt?:string;jobs?:LiveJob[];windowMinutes?:number};
-type Props={trackedUrls:string[];onSaveJob:(job:LiveJob,description?:string,salary?:string)=>void;accessKey:string;onNeedAccess:()=>void;onSeePipeline:()=>void};
-const SEEN_KEY='careeros_fresh_seen_v2';
-const DISMISSED_KEY='careeros_fresh_dismissed_v2';
+type FeedPayload={status:string;message?:string;checkedAt?:string;jobs?:LiveJob[];boardsChecked?:number;boardsWorking?:number};
+type Props={trackedUrls:string[];onSaveJob:(job:LiveJob,description?:string,salary?:string)=>void;onSeePipeline:()=>void;accessKey?:string;onNeedAccess?:()=>void};
+const SEEN_KEY="careeros_fresh_seen_v3";
+const HIDDEN_KEY="careeros_fresh_hidden_v3";
 const SENIOR=/\b(senior|sr\.?|staff|principal|lead|manager|director|architect|head of)\b/i;
-function readSaved(key:string):string[]{try{const x=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(x)?x.filter((v):v is string=>typeof v==='string').slice(-800):[];}catch{return [];}}
-function timeLabel(minutes:number){return minutes<1?'Just now':minutes<60?`${minutes}m ago`:'About 1h ago';}
+const AGE_WINDOWS=[{minutes:60,label:"Past hour"},{minutes:1440,label:"Past 24 hours"},{minutes:10080,label:"Past 7 days"}] as const;
+function readLocal(key:string):string[]{try{const value=JSON.parse(localStorage.getItem(key)||"[]");return Array.isArray(value)?value.filter((x):x is string=>typeof x==="string").slice(-1000):[];}catch{return [];}}
+function elapsedLabel(minutes:number){if(minutes<1)return "Just posted";if(minutes<60)return `${minutes}m ago`;if(minutes<1440)return `${Math.floor(minutes/60)}h ago`;return `${Math.floor(minutes/1440)}d ago`;}
+function cleanUrl(u:string){try{const value=new URL(u);return value.origin+value.pathname.replace(/\/$/,"");}catch{return u;}}
 
-export default function LinkedInFreshFeed({trackedUrls,onSaveJob,accessKey,onNeedAccess,onSeePipeline}:Props){
-  const [jobs,setJobs]=useState<LiveJob[]>([]),[status,setStatus]=useState<'idle'|'loading'|'ready'|'setup'|'error'>('idle');
-  const [statusText,setStatusText]=useState(''),[updated,setUpdated]=useState('');
-  const [seen,setSeen]=useState<string[]>([]),[dismissed,setDismissed]=useState<string[]>([]);
-  const [showAll,setShowAll]=useState(true),[includeSenior,setIncludeSenior]=useState(false),[query,setQuery]=useState('');
-  const [now,setNow]=useState(Date.now()),[openId,setOpenId]=useState<string|null>(null);
-  const [details,setDetails]=useState<Record<string,{description:string;salary:string;easyApply:boolean;error?:string}>>({});
-  const [detailBusy,setDetailBusy]=useState<string|null>(null);
-  const [notify,setNotify]=useState(false);
-  const everLoaded=useRef(false), inFlight=useRef(false),lastIds=useRef<Set<string>>(new Set());
+export default function LinkedInFreshFeed({trackedUrls,onSaveJob,onSeePipeline}:Props){
+  const [jobs,setJobs]=useState<LiveJob[]>([]);
+  const [status,setStatus]=useState<"idle"|"loading"|"ready"|"error">("idle");
+  const [message,setMessage]=useState("");
+  const [checkedAt,setCheckedAt]=useState("");
+  const [boardCount,setBoardCount]=useState(0);
+  const [boardOK,setBoardOK]=useState(0);
+  const [seen,setSeen]=useState<string[]>([]);
+  const [hidden,setHidden]=useState<string[]>([]);
+  const [includeSenior,setIncludeSenior]=useState(false);
+  const [showSeen,setShowSeen]=useState(true);
+  const [ageWindow,setAgeWindow]=useState<number>(60);
+  const [query,setQuery]=useState("");
+  const [clock,setClock]=useState(Date.now());
+  const [expanded,setExpanded]=useState<string|null>(null);
+  const [previousCheck,setPreviousCheck]=useState<string|null>(null);
+  const busy=useRef(false);
+  const initialized=useRef(false);
 
-  useEffect(()=>{setSeen(readSaved(SEEN_KEY));setDismissed(readSaved(DISMISSED_KEY));},[]);
-  const updateSeen=(ids:string[])=>{setSeen(previous=>{const next=[...new Set([...previous,...ids])].slice(-800);localStorage.setItem(SEEN_KEY,JSON.stringify(next));return next;});};
-  const dismiss=(id:string)=>{setDismissed(previous=>{const next=[...new Set([...previous,id])].slice(-800);localStorage.setItem(DISMISSED_KEY,JSON.stringify(next));return next;});};
-
+  useEffect(()=>{setSeen(readLocal(SEEN_KEY));setHidden(readLocal(HIDDEN_KEY));},[]);
+  const markSeen=(id:string)=>setSeen(prev=>{const next=[...new Set([...prev,id])].slice(-1000);localStorage.setItem(SEEN_KEY,JSON.stringify(next));return next;});
+  const dismiss=(id:string)=>setHidden(prev=>{const next=[...new Set([...prev,id])].slice(-1000);localStorage.setItem(HIDDEN_KEY,JSON.stringify(next));return next;});
   const load=useCallback(async()=>{
-    if(!accessKey){setStatus('setup');setStatusText('Enter your CareerOS access key to unlock the feed.');return;}
-    if(inFlight.current)return;
-    inFlight.current=true;
-    setStatus(current=>current==='ready'?'ready':'loading');
+    if(busy.current)return;
+    busy.current=true;
+    setStatus(previous=>previous==="ready"?"ready":"loading");
     try{
-      const r=await fetch('/api/jobs/live',{headers:{'x-careeros-key':accessKey},cache:'no-store'});
-      const data=await r.json() as FeedPayload;
-      if(!r.ok){setStatus(r.status===401||r.status===503?'setup':'error');setStatusText(data.message||`Feed unavailable (${r.status})`);return;}
-      if(data.status!=='ok'||!Array.isArray(data.jobs))throw new Error('Unexpected feed response');
-      const valid=data.jobs.filter(j=>j&&typeof j.id==='string'&&j.easyApply&&typeof j.url==='string');
-      const newJobs=valid.filter(j=>!lastIds.current.has(j.id));
-      lastIds.current=new Set(valid.map(j=>j.id));
-      if(notify && everLoaded.current && newJobs.length && typeof Notification!=='undefined' && Notification.permission==='granted' && document.visibilityState==='hidden'){
-        new Notification(`${newJobs.length} fresh Easy Apply ${newJobs.length===1?'job':'jobs'}`,{body:'Open CareerOS to see the new postings.'});
-      }
-      everLoaded.current=true;
-      setJobs(valid);setUpdated(data.checkedAt||new Date().toISOString());setStatus('ready');setStatusText('');
-    }catch(err){setStatus('error');setStatusText(err instanceof Error?err.message:'Could not load jobs.');}
-    finally{inFlight.current=false;}
-  },[accessKey,notify]);
-
-  useEffect(()=>{void load();const id=window.setInterval(()=>void load(),REFRESH_INTERVAL_MS);
-    const focus=()=>{if(document.visibilityState==='visible')void load();};
-    document.addEventListener('visibilitychange',focus);return()=>{window.clearInterval(id);document.removeEventListener('visibilitychange',focus);};
+      const response=await fetch("/api/jobs/live",{cache:"no-store"});
+      const payload=await response.json() as FeedPayload;
+      if(!response.ok||payload.status!=="ok"||!Array.isArray(payload.jobs))throw new Error(payload.message||"Could not fetch public job boards");
+      const valid=payload.jobs.filter(j=>j && typeof j.id==="string" && typeof j.postedAt==="string" && j.source==="Ashby public job board");
+      const freshIds=new Set(valid.map(j=>j.id));
+      const recentNew=initialized.current?valid.filter(j=>!jobs.some(old=>old.id===j.id)): [];
+      if(recentNew.length) setPreviousCheck(`${recentNew.length} new role${recentNew.length===1?"":"s"} since the previous check`);
+      initialized.current=true;
+      setJobs(valid);
+      setCheckedAt(payload.checkedAt||new Date().toISOString());
+      setBoardCount(payload.boardsChecked||0);
+      setBoardOK(payload.boardsWorking||0);
+      setStatus("ready");
+      setMessage("");
+      void freshIds;
+    }catch(error){setStatus("error");setMessage(error instanceof Error?error.message:"Could not load openings");}
+    finally{busy.current=false;}
+  // jobs deliberately excluded so the interval does not restart on every response.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+  useEffect(()=>{
+    void load();
+    const timer=window.setInterval(()=>void load(),REFRESH_INTERVAL_MS);
+    const onVisible=()=>{if(document.visibilityState==="visible")void load();};
+    document.addEventListener("visibilitychange",onVisible);
+    return ()=>{window.clearInterval(timer);document.removeEventListener("visibilitychange",onVisible);};
   },[load]);
-  useEffect(()=>{const t=window.setInterval(()=>setNow(Date.now()),30_000);return()=>window.clearInterval(t);},[]);
+  useEffect(()=>{const timer=window.setInterval(()=>setClock(Date.now()),30000);return ()=>window.clearInterval(timer);},[]);
 
-  const trackedIds=useMemo(()=>new Set(trackedUrls.map(v=>(v.match(/\/jobs\/view\/(?:[^/?#]*?-)?(\d{7,})/)||[])[1]).filter(Boolean)),[trackedUrls]);
-  const display=useMemo(()=>jobs.filter(job=>{
-    const seenAge=job.postedMinutes??61;
-    const elapsed=updated?Math.max(0,(now-new Date(updated).getTime())/60000):0;
-    const stillFresh=seenAge+elapsed<=60;
-    return stillFresh&&!dismissed.includes(job.id)&& (includeSenior||!SENIOR.test(job.title)) && (showAll||!seen.includes(job.id)) && (!query||`${job.title} ${job.company} ${job.location}`.toLowerCase().includes(query.toLowerCase()));
-  }),[jobs,dismissed,includeSenior,showAll,seen,query,now,updated]);
-  const unseenCount=jobs.filter(j=>!seen.includes(j.id)&&!dismissed.includes(j.id)).length;
-  const age=updated?Math.floor((now-new Date(updated).getTime())/60000):null;
-
-  const reveal=async(job:LiveJob)=>{
-    const expanded=openId!==job.id;
-    setOpenId(expanded?job.id:null);
-    updateSeen([job.id]);
-    if(!expanded||details[job.id]||!accessKey)return;
-    setDetailBusy(job.id);
-    try{
-      const response=await fetch(`/api/jobs/details?id=${encodeURIComponent(job.id)}`,{headers:{'x-careeros-key':accessKey}});
-      const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load job details');
-      setDetails(prev=>({...prev, [job.id]:{description:String(data.description||''),salary:String(data.salary||''),easyApply:data.easyApply===true}}));
-    }catch(err){setDetails(prev=>({...prev,[job.id]:{description:'',salary:'',easyApply:true,error:err instanceof Error?err.message:'Could not load details'}}));}
-    finally{setDetailBusy(null);}
-  };
-  const enableAlerts=async()=>{
-    if(typeof Notification==='undefined'){setStatusText('Browser notifications are unavailable on this device.');return;}
-    const p=await Notification.requestPermission();setNotify(p==='granted');
-    if(p!=='granted')setStatusText('Browser notifications were not enabled.');
-  };
+  const existing=useMemo(()=>new Set(trackedUrls.map(cleanUrl)),[trackedUrls]);
+  const filtered=useMemo(()=>jobs.filter(job=>{
+    const postedMs=Date.parse(job.postedAt);
+    const age=(clock-postedMs)/60000;
+    if(!Number.isFinite(postedMs)||age<0||age>ageWindow)return false;
+    if(hidden.includes(job.id) || (!showSeen&&seen.includes(job.id)))return false;
+    if(!includeSenior&&SENIOR.test(job.title))return false;
+    if(query&&!([job.title,job.company,job.location,job.description].join(" ").toLowerCase().includes(query.toLowerCase())))return false;
+    return true;
+  }),[jobs,clock,ageWindow,hidden,showSeen,seen,includeSenior,query]);
+  const unseen=filtered.filter(j=>!seen.includes(j.id)).length;
+  const lastCheck=checkedAt?Math.max(0,Math.floor((clock-Date.parse(checkedAt))/60000)):null;
 
   return <div className="auto-feed">
     <header className="auto-head">
-      <div><div className="fresh-eyebrow"><Radio size={14}/> AUTOMATED INTAKE · NYC SOFTWARE ENGINEERING</div>
+      <div><div className="fresh-eyebrow"><Radio size={14}/> FREE AUTOMATED INTAKE · NYC SOFTWARE ENGINEERING</div>
         <h1>Fresh jobs. <em>Right here.</em></h1>
-        <p>Actual LinkedIn Easy Apply listings pulled into CareerOS through SearchAPI, filtered to postings from the past hour. No hunting through six searches.</p>
+        <p>Current software engineering openings flow directly from public company job boards into CareerOS. No subscriptions, provider credentials, or searching six separate pages.</p>
       </div>
-      <div className="auto-status"><span className={`auto-dot ${status==='ready'?'ready':'offline'}`}/><strong>{status==='ready'?'Monitoring while open':status==='loading'?'Connecting…':'Setup needed'}</strong><small>{updated?`Checked ${age===0?'just now':`${age}m ago`}`:'No successful sync yet'}</small></div>
+      <div className="auto-status"><span className={`auto-dot ${status==="ready"?"ready":"offline"}`}/>
+        <strong>{status==="ready"?"Monitoring while open":status==="loading"?"Checking job boards…":"Feed unavailable"}</strong>
+        <small>{checkedAt?`Checked ${lastCheck===0?"just now":`${lastCheck}m ago`}`:"No successful check yet"}</small>
+        {boardCount>0&&<small>{boardOK}/{boardCount} boards reachable</small>}
+      </div>
     </header>
-    <div className="auto-toolbar"><div className="auto-tally"><Clock3 size={18}/><strong>{display.length}</strong><span>fresh roles in feed</span><span className="auto-separator">·</span><span>{unseenCount} unseen from latest scan</span></div>
-      <div className="auto-actions"><button type="button" className="btn btn-outline" onClick={()=>void load()} disabled={status==='loading'}><RefreshCw size={15}/> Refresh</button><button type="button" className="btn btn-outline" onClick={()=>notify?setNotify(false):void enableAlerts()}><Bell size={15}/>{notify?'Alerts on':'Desktop alerts'}</button></div>
+    <div className="auto-toolbar">
+      <div className="auto-tally"><Clock3 size={18}/><strong>{filtered.length}</strong><span>roles in selected window</span><span className="auto-separator">·</span><span>{unseen} not yet opened</span></div>
+      <div className="auto-actions"><button type="button" className="btn btn-outline" onClick={()=>void load()} disabled={status==="loading"}><RefreshCw size={15}/> Refresh feed</button></div>
     </div>
     <div className="auto-layout">
       <section className="auto-feed-main">
-        <div className="auto-controls"><div className="fresh-input-wrap"><Search size={16}/><input aria-label="Filter listed jobs" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Filter companies or technologies"/></div>
-          <label><input type="checkbox" checked={showAll} onChange={e=>setShowAll(e.target.checked)}/> Include seen</label>
+        <div className="auto-controls">
+          <div className="fresh-input-wrap"><Search size={16}/><input aria-label="Filter roles" placeholder="Search by company, stack, or title" value={query} onChange={event=>setQuery(event.target.value)}/></div>
+          <select aria-label="Published within" value={ageWindow} onChange={e=>setAgeWindow(Number(e.target.value))}>{AGE_WINDOWS.map(x=><option key={x.minutes} value={x.minutes}>{x.label}</option>)}</select>
+          <label><input type="checkbox" checked={showSeen} onChange={e=>setShowSeen(e.target.checked)}/> Include seen</label>
           <label><input type="checkbox" checked={includeSenior} onChange={e=>setIncludeSenior(e.target.checked)}/> Include senior roles</label>
         </div>
-        {(status==='setup'||!accessKey)&&<div className="auto-empty"><ShieldCheck size={30}/><h2>Connect the job intake once</h2><p>{statusText||'Your SearchAPI provider key and CareerOS access key are needed before live listings can appear.'}</p><p>After the one-time setup, matching postings arrive in this feed automatically every five minutes while it is open.</p><button className="btn btn-primary" onClick={onNeedAccess}>Configure access</button></div>}
-        {status==='error'&&<div className="auto-empty"><RefreshCw size={30}/><h2>Latest scan failed</h2><p>{statusText}</p><button className="btn btn-primary" onClick={()=>void load()}>Retry scan</button></div>}
-        {status==='loading'&&<div className="auto-empty"><RefreshCw size={28} className="auto-spin"/><h2>Checking new listings…</h2><p>Looking for Easy Apply jobs posted in the last hour.</p></div>}
-        {status==='ready'&&display.length===0&&<div className="auto-empty"><Eye size={30}/><h2>You're caught up.</h2><p>No matching unseen postings are available in this hour's results. The feed will check again automatically. To review older seen jobs, enable “Include seen”.</p><button className="btn btn-outline" onClick={()=>setShowAll(true)}>View seen roles</button></div>}
-        {status==='ready'&&display.map(job=><article className="auto-job" key={job.id}>
-          <div className="auto-job-top"><div className="auto-logo">{job.company[0]?.toUpperCase()}</div><div className="auto-job-info"><button className="auto-title" onClick={()=>void reveal(job)}>{job.title} <ChevronDown size={16}/></button><div className="auto-company">{job.company} · {job.location||'Location not specified'}</div></div><span className="auto-age">{timeLabel(job.postedMinutes??0)}</span></div>
-          <div className="auto-tags"><span>LinkedIn Easy Apply*</span><span>Software engineering</span><span>Provider: SearchAPI</span></div>
-          {openId===job.id&&<div className="auto-description">{detailBusy===job.id?<p>Loading the description…</p>:details[job.id]?.error?<p>{details[job.id].error}</p>:<><strong>{details[job.id]?.salary||'Salary not provided'}</strong><p>{details[job.id]?.description||'No description available from the provider.'}</p>{details[job.id]&&!details[job.id].easyApply&&<p className="auto-warning">The detail endpoint did not confirm Easy Apply. Check before applying.</p>}</>}</div>}
-          <div className="auto-job-actions"><button className="btn btn-primary" disabled={trackedIds.has(job.id)} onClick={()=>{onSaveJob(job,details[job.id]?.description,details[job.id]?.salary);updateSeen([job.id]);}}>{trackedIds.has(job.id)?<BookmarkCheck size={16}/>:<Check size={16}/>} {trackedIds.has(job.id)?'Saved':'Save job'}</button>
-            <button className="btn btn-outline" onClick={()=>void reveal(job)}>Details <ChevronDown size={14}/></button>
-            <a className="btn btn-outline" href={job.url} rel="noopener noreferrer" target="_blank">Apply <ArrowUpRight size={15}/></a>
-            <button className="auto-dismiss" title="Hide job" onClick={()=>dismiss(job.id)}><EyeOff size={16}/></button></div>
+        {previousCheck&&<p className="fresh-desc">{previousCheck}</p>}
+        {status==="error"&&<div className="auto-empty"><RefreshCw size={30}/><h2>Feed temporarily unavailable</h2><p>{message}</p><button className="btn btn-primary" onClick={()=>void load()}>Try again</button></div>}
+        {status==="loading"&&<div className="auto-empty"><RefreshCw size={28} className="auto-spin"/><h2>Reading public job boards…</h2><p>Checking actual publication dates, NYC locations, and software engineering titles.</p></div>}
+        {status==="ready"&&filtered.length===0&&<div className="auto-empty"><Eye size={30}/><h2>No matches in this window</h2>
+          <p>The selected boards have no matching roles published in this time window, or you've hidden them. Try the past 24 hours or 7 days. The feed will keep checking while CareerOS is open.</p>
+          <button className="btn btn-primary" onClick={()=>setAgeWindow(10080)}>See the past 7 days</button></div>}
+        {status==="ready"&&filtered.map(job=><article key={job.id} className="auto-job">
+          <div className="auto-job-top"><div className="auto-logo">{job.company[0]?.toUpperCase()}</div><div className="auto-job-info"><button className="auto-title" onClick={()=>{setExpanded(expanded===job.id?null:job.id);markSeen(job.id);}}>{job.title} <ChevronDown size={16}/></button><div className="auto-company">{job.company} · {job.location}</div></div><span className="auto-age">{elapsedLabel(Math.max(0,Math.floor((clock-Date.parse(job.postedAt))/60000)))}</span></div>
+          <div className="auto-tags"><span>{job.workMode}</span><span>Direct employer listing</span><span>{seen.includes(job.id)?"Seen":"New to you"}</span></div>
+          {expanded===job.id&&<div className="auto-description"><strong>{job.salary||"Compensation not supplied"}</strong><p style={{whiteSpace:"pre-wrap"}}>{job.description||"Description unavailable from the employer's public board."}</p><small>Published {new Date(job.postedAt).toLocaleString()}. This timestamp is the last publication time provided by the employer's ATS.</small></div>}
+          <div className="auto-job-actions">
+            <button className="btn btn-primary" disabled={existing.has(cleanUrl(job.url))} onClick={()=>{onSaveJob(job,job.description,job.salary);markSeen(job.id);}}>{existing.has(cleanUrl(job.url))?<BookmarkCheck size={16}/>:<Check size={16}/>} {existing.has(cleanUrl(job.url))?"Saved":"Save to pipeline"}</button>
+            <button className="btn btn-outline" onClick={()=>{setExpanded(expanded===job.id?null:job.id);markSeen(job.id);}}>Description <ChevronDown size={14}/></button>
+            <a className="btn btn-outline" href={job.applyUrl||job.url} target="_blank" rel="noopener noreferrer">Apply <ArrowUpRight size={15}/></a>
+            <button type="button" className="auto-dismiss" title="Hide this opening" aria-label={`Hide ${job.title}`} onClick={()=>dismiss(job.id)}><EyeOff size={16}/></button>
+          </div>
         </article>)}
       </section>
-      <aside className="auto-aside"><div className="surface"><div className="eyebrow muted">HOW THE AUTOMATION WORKS</div><h3>A live intake, not links</h3><p><strong>Source:</strong> SearchAPI LinkedIn Jobs engine</p><p><strong>Search:</strong> Software Engineer · NYC metro · last hour · Easy Apply</p><p><strong>Updates:</strong> every five minutes while the page is open, plus when you return to the tab</p><p><strong>Storage:</strong> seen and hidden jobs stay in this browser; saved jobs go straight to your pipeline</p><button className="fresh-view-pipeline" onClick={onSeePipeline}>Your saved applications <BriefcaseBusiness size={15}/></button></div>
-        <div className="surface"><Sparkles size={20}/><h3>What runs without you?</h3><p>The feed loads and refreshes on its own. Expand a job to read details here, or save it with one click. Applying still requires LinkedIn.</p><small>*Easy Apply and posting age come from the third-party provider's filters, not independent LinkedIn verification. Feed access requires separate API billing. Background collection when the app is closed requires a future scheduled worker and cloud database.</small></div>
+      <aside className="auto-aside">
+        <div className="surface"><div className="eyebrow muted">NO EXTRA COST</div><h3>Free company feeds</h3>
+          <p>CareerOS checks selected Ashby-powered employer boards, including sports technology and NYC product companies. The default window is one hour; choose 24 hours or seven days when it's quiet.</p>
+          <p><strong>Refresh:</strong> every five minutes while this page stays open, plus when you return.</p>
+          <p><strong>Storage:</strong> seen and hidden jobs remain in this browser. Saved roles go to your pipeline.</p>
+          <button className="fresh-view-pipeline" onClick={onSeePipeline}>Your saved applications <BriefcaseBusiness size={15}/></button>
+        </div>
+        <div className="surface"><Sparkles size={20}/><h3>What this does not claim</h3>
+          <p>These are direct employer applications—not verified LinkedIn Easy Apply listings. The feed covers selected companies, not the entire NYC job market.</p>
+          <small>No background collection while the app is closed, no automatic applications, no paid AI or job-feed requests, and no fake results. Vercel Hobby usage limits still apply.</small>
+          <p><ShieldCheck size={15}/> Read-only public sources. No login required.</p>
+        </div>
       </aside>
     </div>
   </div>;
