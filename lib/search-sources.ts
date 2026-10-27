@@ -147,7 +147,8 @@ async function himalayas(query:string,now:string):Promise<SourceResult>{
    const locationRestrictions=asArray(j.locationRestrictions).map(v=>asObj(v)).filter(Boolean) as Record<string,unknown>[];
    const US=locationRestrictions.length===0 || locationRestrictions.some(v=>/^(US|USA)$/i.test(string(v.alpha2))||/united states/i.test(string(v.name)));
    if(!US)continue;
-   const url=externalUrl(j.applicationLink,/\.himalayas\.app$/i);
+   // Himalayas terms require the applicationLink unchanged (which may point to another HTTPS host).
+   const url=externalUrl(j.applicationLink);
    if(!url)continue;
    const desc=plain(string(j.description)||string(j.excerpt));
    const mins=typeof j.minSalary==="number"?j.minSalary:null;
