@@ -1,70 +1,40 @@
-# CareerOS implementation roadmap
+# CareerOS 2.0 — rebuild decisions
 
-## v0.1 — Created starter
-- Responsive dashboard and navigation
-- Local-first opportunities and contact CRM
-- Deterministic, interpretable fit scoring
-- Manual application pipeline transitions
-- AI Copilot UI and server-side Vercel AI Gateway endpoint (configuration required)
-- Local JSON export/import
+**Date:** October 27, 2026.
 
-## v0.2 — Make it durable
-- Private authentication and per-user Firestore storage
-- Add test coverage and schema validation for backup import
-- Prompt-injection and output safety review for AI-generated application content
-- Editable candidate profile from a verified master source
-- Resume/cover letter export
+## Product principle
+The user asked for a powerful, **free, search-first job engine**, not an application dashboard. The primary output is a ranked queue of actual open jobs and evidence-backed reasons to apply.
 
-## v0.3 — Discover and follow up
-- Automated ATS/career feed search with retries and provenance
-- Duplicate detection, posting freshness and broken-link checks
-- Contact suggestion queue with provenance, not fabricated relationships
-- Gmail/Calendar user-consented OAuth connection
-- Recurring alerts, interview prep and follow-up reminders
+## Boundaries
+- Focus: NYC metro onsite/hybrid and US-eligible remote.
+- Role tracks: software engineering, solutions/implementation engineering and associate product roles.
+- Sector interest: sports/fitness is a soft preference, not a license to rank unqualified jobs higher.
+- Default: exclude significant seniority, minimum tenure and location mismatches.
+- No invented interview probabilities. Fit priority uses published job requirements and verified career facts.
+- No additional paid data subscriptions or new OpenAI API costs.
+- No unauthorized LinkedIn or Built In scraping. Public ATS data is the primary job inventory.
+- No private career files, personal contact details, Onshore or FitView in the public app.
 
-## v1.0 — Closed feedback loop
-- Funnel metrics by role track, source, and company
-- Human-reviewed document versions
-- AI recommendations with evidence links
-- Server-side privacy and data-retention controls
+## Rebuilt components
+- `lib/engine/profile.ts`: public non-sensitive verified candidate evidence and types.
+- `lib/engine/rank.ts`: explainable fit analysis and hard eligibility ceilings.
+- `lib/engine/sources.ts`: public Ashby/Greenhouse/Lever/Himalayas source aggregators.
+- `app/api/search/route.ts`: server endpoint that reports source availability and real jobs.
+- `app/page.tsx`, `app/globals.css`: search first, role chips, criteria, results, match explanations, shortlist, mobile UI.
+- `tests/ranking.test.cjs`: deterministic career-fit regression tests.
+- `scripts/probe-discovery.cjs`: actual end-to-end live search verification.
+- `.github/workflows/verify.yml`: CI gates.
 
-## v0.1.1 — Gateway connection readiness
-- Added Vercel OIDC fallback so the app can use OpenAI models through Vercel AI Gateway without storing a Gateway key on Vercel deployments.
-- Added a configuration-check GET endpoint and an in-app setup indicator (configuration presence does not verify live inference).
-- Updated default model to a verified available Gateway OpenAI model and clarified billing/authorization requirements.
-- Production-grade auth, server-side rate limiting and account-based sessions remain out of scope for v0.1.1.
+## Success conditions
+1. GitHub Actions typecheck, deterministic tests and production build pass.
+2. The end-to-end live test returns actual normalized jobs and HTTPS apply links.
+3. Senior and 5+ year roles do not score as strong interview targets.
+4. The UI never claims a statistical interview probability.
+5. No paid-key setup screens or application-dashboard front page.
+6. Vercel Hobby deployment is separately verified before calling it live.
 
-## v0.1.2 — Fresh Jobs
-- LinkedIn Easy Apply / last-hour deep-link search launcher; newest first, full-time NYC SWE.
-- Six keyword search lanes; 15/30/60-minute range; hybrid / onsite / remote filters.
-- Safe LinkedIn job URL validation, canonicalization and duplicate-aware pipeline handoff.
-- No scraping, job ingestion, auto-applying or fake "live" job cards. A true in-app continuously updating LinkedIn-specific feed requires a licensed source/approved integration.
-
-## v0.2 — Automated intake (code ready, credentials required)
-- Replaced the search-link dashboard with real in-app LinkedIn job cards fetched via SearchAPI. Filters are one-hour posting window, NYC metro and Easy Apply.
-- Refreshes every five minutes with browser tab open and on tab focus; server cache TTL five minutes, server-side provider key, authenticated GET.
-- Dedupes provider records, suppresses stale or undated postings, filters software engineering roles, tracks seen/hidden jobs in browser storage.
-- Optional in-app job description lookup with separate provider request; one-click pipeline save.
-- Needs SearchAPI key + CAREEROS_ACCESS_KEY in Vercel. SearchAPI is third-party; review provider and LinkedIn terms and billing. No scraping code or LinkedIn login.
-- Still requires persistent cloud storage and a scheduler for ingesting when the app is closed; build and live integration not yet verified.
-
-
-## v0.2.1 — Zero additional subscriptions (implemented in source)
-- User requires no additional spending beyond existing ChatGPT Plus.
-- Removed paid SearchAPI ingestion and job-details endpoint.
-- Replaced with curated read-only public Ashby company-board queries for NYC full-time SWE postings, with real publication timestamps.
-- Free boards include GameChanger, Novig, Medal / General Intuition, Notion, Clay, Ramp, Patreon, and Pure. Filters cover past hour / day / week.
-- Jobs appear as in-app cards, refreshed every five minutes while the Fresh Jobs view is open; descriptions are included and one-click pipeline saving no longer assumes LinkedIn URLs.
-- Metered OpenAI/Vercel AI Gateway requests are disabled by default using CAREEROS_ENABLE_METERED_AI opt-in guard, including when Vercel OIDC is available. ChatGPT Plus remains a separate website service.
-- Requires a deployment and a complete Next.js build test; no Vercel project is yet confirmed.
-- Do not claim complete LinkedIn Easy Apply coverage or background polling while the browser is closed. The public Vercel Hobby plan supports daily cron only, so hourly unattended polling is not yet configured.
-
-
-## v0.2.2 — LinkedIn + Built In alert ingestion (source integrated, OAuth setup required)
-- Added an in-app Gmail read-only importer for email job alerts from LinkedIn and Built In. No scraping, third-party job-data subscriptions, or extra OpenAI fees.
-- Added client-side OAuth via Google Identity Services, with access tokens held only in memory and no server-side Gmail data processing.
-- Reads up to 45 recent candidate emails, limited to linked sender domains and relevant job-alert subject/body; follows direct posting links from the delivered email, canonicalizes and deduplicates jobs.
-- Displays received timestamps rather than pretending an email timestamp is the posting time, and explicitly marks Easy Apply as unverified.
-- Saves extracted jobs directly to the existing CareerOS pipeline and shares the Fresh Jobs screen with free employer ATS feeds.
-- Browser polling is five minutes only while the app is open; Gmail OAuth testing/verification and Google Cloud client ID configuration are still necessary. Emails may arrive daily or weekly.
-- Avoid broad claims: not an official LinkedIn or Built In job-search API, not exhaustive coverage, not hourly notifications guaranteed.
+## Deliberate limitations
+- The catalog is not exhaustive and can lose individual employer boards.
+- Free sources refresh on different cadences.
+- No unattended 24/7 collection, login, cross-device sync or LinkedIn Easy Apply automation.
+- Saved shortlist is local-only, not a cloud database.
