@@ -3,9 +3,11 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {ArrowUpRight,BookmarkCheck,BriefcaseBusiness,Check,ChevronDown,Clock3,Eye,EyeOff,Radio,RefreshCw,Search,ShieldCheck,Sparkles} from "lucide-react";
 import {REFRESH_INTERVAL_MS,type LiveJob} from "@/lib/live-jobs";
+import AlertInboxFeed from "@/components/AlertInboxFeed";
+import type {AlertListing} from "@/lib/alert-inbox";
 
 type FeedPayload={status:string;message?:string;checkedAt?:string;jobs?:LiveJob[];boardsChecked?:number;boardsWorking?:number};
-type Props={trackedUrls:string[];onSaveJob:(job:LiveJob,description?:string,salary?:string)=>void;onSeePipeline:()=>void;accessKey?:string;onNeedAccess?:()=>void};
+type Props={trackedUrls:string[];onSaveJob:(job:LiveJob,description?:string,salary?:string)=>void;onSaveAlert:(job:AlertListing)=>void;onSeePipeline:()=>void};
 const SEEN_KEY="careeros_fresh_seen_v3";
 const HIDDEN_KEY="careeros_fresh_hidden_v3";
 const SENIOR=/\b(senior|sr\.?|staff|principal|lead|manager|director|architect|head of)\b/i;
@@ -14,7 +16,7 @@ function readLocal(key:string):string[]{try{const value=JSON.parse(localStorage.
 function elapsedLabel(minutes:number){if(minutes<1)return "Just posted";if(minutes<60)return `${minutes}m ago`;if(minutes<1440)return `${Math.floor(minutes/60)}h ago`;return `${Math.floor(minutes/1440)}d ago`;}
 function cleanUrl(u:string){try{const value=new URL(u);return value.origin+value.pathname.replace(/\/$/,"");}catch{return u;}}
 
-export default function LinkedInFreshFeed({trackedUrls,onSaveJob,onSeePipeline}:Props){
+export default function LinkedInFreshFeed({trackedUrls,onSaveJob,onSaveAlert,onSeePipeline}:Props){
   const [jobs,setJobs]=useState<LiveJob[]>([]);
   const [status,setStatus]=useState<"idle"|"loading"|"ready"|"error">("idle");
   const [message,setMessage]=useState("");
@@ -98,6 +100,7 @@ export default function LinkedInFreshFeed({trackedUrls,onSaveJob,onSeePipeline}:
       <div className="auto-tally"><Clock3 size={18}/><strong>{filtered.length}</strong><span>roles in selected window</span><span className="auto-separator">·</span><span>{unseen} not yet opened</span></div>
       <div className="auto-actions"><button type="button" className="btn btn-outline" onClick={()=>void load()} disabled={status==="loading"}><RefreshCw size={15}/> Refresh feed</button></div>
     </div>
+    <AlertInboxFeed trackedUrls={trackedUrls} onSave={onSaveAlert}/>
     <div className="auto-layout">
       <section className="auto-feed-main">
         <div className="auto-controls">
