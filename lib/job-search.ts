@@ -60,10 +60,11 @@ const YEARS=/(?:at least|minimum of|\bmin\.?\s*)?\b(\d{1,2})\s*\+?\s*(?:years|yr
 const DEFAULT_PREFS:SearchFilters={text:"",track:"all",mode:"all",maxDays:3650,sort:"fit",hideStretch:true,sources:"all"};
 export {DEFAULT_PREFS};
 export function classifyTrack(title:string):Track|null{
+  // Classify by the actual job function. Incidental words like "technical solutions"
+  // in a training, enablement or sales title do NOT imply solutions engineering.
   if(/\b(associate product manager|product manager|product owner|apm|product analyst|technical product manager|product operations)\b/i.test(title))return "product";
-  if(/\b(solutions? engineer|implementation (?:engineer|consultant|specialist)|technical (?:solutions?|consultant|customer success|support engineer|account manager)|sales engineer|integration (?:engineer|specialist)|customer engineer)\b/i.test(title))return "solutions";
-  if(/\b(software|full[ -]?stack|front[ -]?end|back[ -]?end|platform|web|application|react|typescript|python|java|\.net|mobile|ios|android|qa|test automation|developer|engineer)\b/i.test(title) &&
-    /\b(engineer|developer|swe|programmer|automation|development)\b/i.test(title))return "engineering";
+  if(/\b(solutions? engineer|solutions? architect|solutions? consultant|implementation (?:engineer|consultant|specialist)|technical (?:consultant|customer success engineer|support engineer|account manager)|sales engineer|integration (?:engineer|specialist)|customer engineer|technical success engineer)\b/i.test(title))return "solutions";
+  if(/\b(software|full[ -]?stack|front[ -]?end|back[ -]?end|platform|web|application|react|typescript|python|java|\.net|mobile|ios|android|qa|test automation)\b.*\b(engineer|developer|swe|programmer|automation)\b|\b(engineer|developer|swe)\b.*\b(software|full[ -]?stack|front[ -]?end|back[ -]?end|platform|web|application|react|typescript|python|java|\.net|mobile|ios|android|qa|test automation)\b/i.test(title))return "engineering";
   return null;
 }
 export function inferWorkMode(location:string,description:string,raw?:string):WorkMode{
@@ -103,25 +104,27 @@ export function rankJob(job:SearchJob):FitResult{
   const title=job.title,desc=job.description.slice(0,16000);
   const text=`${title}\n${desc}`;
   const role=classifyTrack(title)??job.track;
-  let score=53;
+  let score=35;
   const evidence:string[]=[],gaps:string[]=[],tags:string[]=[];
-  if(ENTRY.test(title)){score+=16;evidence.push("Entry/associate-level title fits your experience");}
-  else if(SENIOR.test(title)){score-=34;gaps.push("Senior/lead title is likely beyond your current tenure");}
-  else {score+=4;tags.push("Seniority unconfirmed");}
+  const seniorTitle=SENIOR.test(title);
+  // Hard qualification gates: "Senior Software Engineer I" is senior, despite the "Engineer I" substring.
+  if(seniorTitle){score-=32;gaps.push("Senior/lead title is likely beyond your current tenure");}
+  else if(ENTRY.test(title)){score+=15;evidence.push("Entry/associate-level title fits your experience");}
+  else {score+=6;tags.push("Seniority unconfirmed");}
   const years=experienceYears(desc);
   if(years!==null){
-    if(years<=2){score+=13;evidence.push(`Minimum experience stated: ${years} year${years===1?"":"s"}`);}
-    else if(years===3){score+=3;gaps.push("Lists 3 years; you have about two years of post-graduation experience");}
+    if(years<=2){score+=10;evidence.push(`Minimum experience stated: ${years} year${years===1?"":"s"}`);}
+    else if(years===3){score+=2;gaps.push("Lists 3 years; you have about two years of post-graduation experience");}
     else if(years===4){score-=12;gaps.push("Lists 4 years of experience");}
     else {score-=Math.min(34,12+(years-4)*4);gaps.push(`Lists ${years}+ years of experience`);}
   }else tags.push("Required tenure not clearly stated");
   if(role==="solutions"){
-    score+=13;evidence.push("FIDx client requirements, demos, and implementation experience");
-    if(/customer|stakeholder|client|discovery|implementation/i.test(text)){score+=5;evidence.push("Client-facing responsibilities match your verified work");}
+    score+=12;evidence.push("FIDx client requirements, demos, and implementation experience");
+    if(/customer|stakeholder|client|discovery|implementation/i.test(text)){score+=4;evidence.push("Client-facing responsibilities match your verified work");}
   }else if(role==="engineering"){
     score+=10;evidence.push("FIDx application development and company-wide test automation");
   }else{
-    score+=1;evidence.push("Internal tooling, product iteration, and stakeholder discovery");
+    score+=3;evidence.push("Internal tooling, product iteration, and stakeholder discovery");
     if(!/\b(associate|junior|apm)\b/i.test(title)){score-=7;gaps.push("No verified formal product-management title");}
   }
   const matches=CORE_SKILLS.filter(skill=>skill.regex.test(text)).map(x=>x.name);
@@ -136,10 +139,15 @@ export function rankJob(job:SearchJob):FitResult{
     if(job.workMode==="Hybrid"||job.workMode==="On-site"){score+=3;tags.push("Preferred work arrangement");}
   }else if(job.workMode==="Remote"&&job.remoteEligibility!=="unknown"){score+=2;tags.push("US-eligible remote");}
   else{score-=12;gaps.push("Location or US work eligibility needs confirmation");}
-  if(SPORTS.test(job.company+" "+job.sector)){score+=5;tags.push("Sports/fitness interest");}
+  if(SPORTS.test(job.company+" "+job.sector)){score+=4;tags.push("Sports/fitness interest");}
   const age=jobAgeDays(job);
-  if(age!==null&&age<=3){score+=3;tags.push(job.dateKind==="published"?"Recently published":"Recently updated");}
+  if(age!==null&&age<=3){score+=2;tags.push(job.dateKind==="published"?"Recently published":"Recently updated");}
   if(job.description.length<120){score-=6;gaps.push("Limited requirements available to assess");}
+  // A severe experience mismatch must not be outweighed by common skills and a NYC address.
+  if(seniorTitle)score=Math.min(score,48);
+  if(years!==null&&years>=5)score=Math.min(score,47);
+  else if(years===4)score=Math.min(score,65);
+  if(role==="product"&&!/\b(associate|junior|apm)\b/i.test(title))score=Math.min(score,65);
   score=Math.min(99,Math.max(4,Math.round(score)));
   const tier=score>=82?"Strong match":score>=68?"Good match":score>=52?"Explore":"Stretch";
   const result:FitResult={score,tier,evidence:evidence.slice(0,4),gaps:gaps.slice(0,3),role,requiredYears:years,tags};
