@@ -28,3 +28,5 @@ jobs:
         run: node tests/ranking.test.cjs
       - name: Production build
         run: npm run build
+      - name: Public jobs provider smoke diagnostics
+        run: node scripts/smoke-sources.mjs
