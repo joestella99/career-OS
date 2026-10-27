@@ -60,6 +60,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{ou
 .filter-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;font-weight:800}
 .filter-heading span{display:flex;align-items:center;gap:8px}
 .filter-heading button{background:none;border:0;font-size:11px;font-weight:800;color:#379165}
+.restore-hidden{border:1px solid #d5e7d7;border-radius:8px;background:#f0f8ef;padding:10px 12px;color:#3d7e5d;display:flex;justify-content:space-between;align-items:center;gap:7px;font-weight:800;font-size:11px}
 .field{display:flex;flex-direction:column;gap:8px}
 .field label{font-size:12px;font-weight:800;color:#3b574a}
 .field select,.sort select{appearance:auto;background:#fff;border:1px solid #dfe8df;border-radius:9px;padding:11px;width:100%;color:#3b574a;font-size:12px;outline:0}
