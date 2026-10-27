@@ -78,8 +78,8 @@ export function inferWorkMode(location:string,description:string,raw?:string):Wo
   return "Unknown";
 }
 export function isNYC(location:string):boolean{
-  return /\b(new york|nyc|manhattan|brooklyn|queens|bronx|hoboken|jersey city|stamford|white plains|long island|newark)\b/i.test(location) ||
-    /\bNY\s*(?:,|\b)/.test(location);
+  // NY state alone is not sufficient: Albany and Buffalo are not NYC metro.
+  return /\b(new york|nyc|manhattan|brooklyn|queens|bronx|hoboken|jersey city|stamford|white plains|long island|newark)\b/i.test(location);
 }
 export function isUSRemote(location:string):boolean{
   return /\b(us|usa|u\.s\.|united states|north america|worldwide|anywhere)\b/i.test(location);
