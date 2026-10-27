@@ -1,13 +1,15 @@
 "use client";
 
 import {useEffect, useMemo, useRef, useState} from "react";
-import {Activity, ArrowRight, BriefcaseBusiness, CalendarClock, Check, ChevronRight, CircleHelp, Compass, Download, ExternalLink, FileText, Filter, LayoutDashboard, Menu, MessageCircle, Network, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Target, Trash2, Upload, WandSparkles, X} from "lucide-react";
+import {Activity, ArrowRight, Radio, BriefcaseBusiness, CalendarClock, Check, ChevronRight, CircleHelp, Compass, Download, ExternalLink, FileText, Filter, LayoutDashboard, Menu, MessageCircle, Network, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Target, Trash2, Upload, WandSparkles, X} from "lucide-react";
 import {scoreJob} from "@/lib/scoring";
+import LinkedInFreshFeed from "@/components/LinkedInFreshFeed";
+import {canonicalLinkedInJobUrl} from "@/lib/linkedin";
 import {STAGES, type ActivePage, type ChatMessage, type Contact, type Job, type JobStage} from "@/lib/types";
 
 const STORAGE = "careeros_v1";
 const nav: {title:ActivePage; Icon:typeof LayoutDashboard}[] = [
-  {title:"Overview", Icon:LayoutDashboard},{title:"Opportunities", Icon:Compass},{title:"Pipeline", Icon:BriefcaseBusiness},
+  {title:"Overview", Icon:LayoutDashboard},{title:"Fresh Jobs", Icon:Radio},{title:"Opportunities", Icon:Compass},{title:"Pipeline", Icon:BriefcaseBusiness},
   {title:"Network", Icon:Network},{title:"AI Copilot", Icon:Sparkles},{title:"Settings", Icon:Settings2}
 ];
 const stageColors: Record<JobStage,string> = {
@@ -88,6 +90,14 @@ export default function Page(){
       setMessages(old=>[...old,{role:"assistant",content:data.reply}]);
     }catch(err){setChatError(err instanceof Error?err.message:"Could not connect to AI.");}finally{setWorking(false);}
   };
+  const trackLinkedInJob=(url:string)=>{
+    const canonical=canonicalLinkedInJobUrl(url);
+    if (!canonical)return;
+    const match=jobs.find(j=>canonicalLinkedInJobUrl(j.url)===canonical);
+    if (match){setJobDraft({...match});setNotice("This job is already tracked. Opened its record.");return;}
+    setJobDraft({...emptyJob(),url:canonical,notes:"Found through CareerOS Fresh Jobs. Verify details and Easy Apply on LinkedIn."});
+    setNotice("Enter the company and role from LinkedIn, then save this posting.");
+  };
   const openChat=(prompt:string)=>{setInput(prompt);go("AI Copilot");};
 
   return <div className="shell">
@@ -101,8 +111,9 @@ export default function Page(){
       <header className="topbar"><button className="mobile-menu icon-btn" onClick={()=>setMobileNav(true)} aria-label="Open menu"><Menu size={20}/></button><div className="crumb">CareerOS <ChevronRight size={14}/> <strong>{section}</strong></div><div className="top-actions"><div className="local-badge"><ShieldCheck size={15}/> Browser-only storage</div><button className="avatar small" onClick={()=>go("Settings")} aria-label="Settings">JS</button></div></header>
       {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={14}/></button></div>}
       <div className="content">
+        {section==="Fresh Jobs"&&<LinkedInFreshFeed trackedUrls={jobs.map(j=>j.url)} onTrackJob={trackLinkedInJob} onSeePipeline={()=>go("Pipeline")}/>}
         {section==="Overview"&&<>
-          <div className="hero"><div><div className="eyebrow"><span className="dot"/> YOUR NEXT CHAPTER</div><h1>Make your next move <em>count.</em></h1><p>One clear home for the opportunities, people and decisions that move your career forward.</p><div className="hero-actions"><button className="btn btn-accent" onClick={()=>{setJobDraft(emptyJob());go("Opportunities")}}><Plus size={17}/> Add opportunity</button><button className="btn btn-ghost-light" onClick={()=>go("AI Copilot")}><Sparkles size={17}/> Open copilot</button></div></div><div className="hero-mark"><Target size={116} strokeWidth={0.8}/><div className="hero-bubble">PURPOSE<br/>OVER VOLUME</div></div></div>
+          <div className="hero"><div><div className="eyebrow"><span className="dot"/> YOUR NEXT CHAPTER</div><h1>Make your next move <em>count.</em></h1><p>One clear home for the opportunities, people and decisions that move your career forward.</p><div className="hero-actions"><button className="btn btn-accent" onClick={()=>{setJobDraft(emptyJob());go("Opportunities")}}><Plus size={17}/> Add opportunity</button><button className="btn btn-ghost-light" onClick={()=>go("Fresh Jobs")}><Radio size={17}/> Fresh Easy Apply jobs</button></div></div><div className="hero-mark"><Target size={116} strokeWidth={0.8}/><div className="hero-bubble">PURPOSE<br/>OVER VOLUME</div></div></div>
           <div className="stats"><Stat label="Active opportunities" value={activeJobs.length} icon={<BriefcaseBusiness size={19}/>} foot="Tracked in your search"/><Stat label="Applications sent" value={jobs.filter(j=>j.stage!=="Saved"&&j.stage!=="Archived").length} icon={<Send size={19}/>} foot="Across tracked roles"/><Stat label="In conversation" value={interviewCount} icon={<MessageCircle size={19}/>} foot="Recruiter screens + interviews"/><Stat label="Follow-ups due" value={followUps.length} icon={<CalendarClock size={19}/>} foot="Contacts due today or earlier" accent={followUps.length>0}/></div>
           <div className="two-col"><section className="surface"><div className="section-top"><div><div className="eyebrow muted">PRIORITY QUEUE</div><h2>Your strongest leads</h2></div><button className="text-btn" onClick={()=>go("Opportunities")}>View all <ArrowRight size={15}/></button></div>{topJobs.length?topJobs.map(j=><JobCompact key={j.id} job={j} onOpen={()=>setJobDraft({...j})}/>):<Empty icon={<Target size={27}/>} title="A good search starts with one role." text="Add your first opportunity to see transparent fit signals and build your target list." action="Add a role" onAction={()=>setJobDraft(emptyJob())}/>}</section>
           <section className="surface"><div className="section-top"><div><div className="eyebrow muted">RELATIONSHIP FIRST</div><h2>People to reconnect with</h2></div><button className="text-btn" onClick={()=>go("Network")}>Network <ArrowRight size={15}/></button></div>{nextActions.length?nextActions.map(c=><div className="contact-compact" key={c.id}><div className="initials">{c.name.split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div className="grow"><strong>{c.name}</strong><small>{c.company||"Your network"} · {c.nextStep||"Follow up"}</small></div><span className="due">{prettyDate(c.followUpDate)}</span></div>):<Empty icon={<Network size={27}/>} title="Your network is an advantage." text="Track conversations and the next step instead of losing introductions in your inbox." action="Add contact" onAction={()=>setContactDraft(emptyContact())}/>}</section></div>
